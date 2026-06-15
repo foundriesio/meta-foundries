@@ -11,4 +11,17 @@ How to contact maintainers. E.g. GitHub Issues, GitHub Discussions could be indi
 
 ## License
 
-*meta-foundries* is licensed under the [MIT](COPYING.MIT) license.
+- *meta-foundries* is licensed under the [MIT](COPYING.MIT) license.
+
+## Layer Dependencies
+
+List of layer dependencies.
+
+
+## Adding the meta-foundries layer to your build
+
+Run 'bitbake-layers add-layer meta-foundries'
+
+## Misc
+
+--- replace with specific information about the meta-foundries layer ---
