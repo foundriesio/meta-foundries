@@ -1,0 +1,26 @@
+header:
+  version: 14
+
+target: core-image-minimal
+
+repos:
+  meta-foundries:
+    layers:
+      .:
+
+  bitbake:
+    url: https://git.openembedded.org/bitbake
+    branch: master
+    layers:
+      .: disabled
+
+  openembedded-core:
+    url: https://git.openembedded.org/openembedded-core
+    branch: master
+    layers:
+      meta:
+
+local_conf_header:
+  base: |
+    CONF_VERSION = "2"
+    DISTRO = "nodistro"

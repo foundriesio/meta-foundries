@@ -15,13 +15,28 @@ How to contact maintainers. E.g. GitHub Issues, GitHub Discussions could be indi
 
 ## Layer Dependencies
 
-List of layer dependencies.
+This layer depends on:
 
+```text
+URI: https://git.openembedded.org/openembedded-core
+layers: meta
+branch: master
+revision: HEAD
+```
+
+This layer has an optional dependency on the meta-arm layer:
+
+```text
+URI: https://git.yoctoproject.org/meta-arm
+layers: meta-arm, meta-arm-bsp
+branch: main
+revision: HEAD
+```
+
+The dependency is optional, and only required for the `qemuarm64-secureboot`
+machine. When that machine is not used (e.g. an Intel target), the layer is not
+needed and does not have to be enabled in BBLAYERS.
 
 ## Adding the meta-foundries layer to your build
 
 Run 'bitbake-layers add-layer meta-foundries'
-
-## Misc
-
---- replace with specific information about the meta-foundries layer ---
