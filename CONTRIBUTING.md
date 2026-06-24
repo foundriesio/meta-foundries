@@ -72,3 +72,9 @@ Here are a few things you can do that will increase the likelihood of your pull 
   If you want to make multiple independent changes, please consider submitting them as separate pull requests.
 - Write a [good commit message](https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html).
 - It's a good idea to arrange a discussion with other developers to ensure there is consensus on large features, architecture changes, and other core code changes. PR reviews will go much faster when there are no surprises.
+
+## Documentation
+
+To lint contributions under docs locally, [install vale](https://vale.sh/docs/vale-cli/installation/).
+After vale is installed, navigate to `docs/` and run `vale sync`. 
+To lint a file, run `vale <file-name>`.
