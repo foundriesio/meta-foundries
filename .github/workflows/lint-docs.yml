@@ -1,0 +1,16 @@
+name: reviewdog
+on: [pull_request]
+
+jobs:
+  vale:
+    name: runner / vale
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: vale-cli/vale-action@v2
+        with:
+         files: docs/
+         reporter: github-pr-check
+         fail_on_error: false
+         token: ${{secrets.GITHUB_TOKEN}}
+         vale_flags: "--config=docs/.vale.ini"
