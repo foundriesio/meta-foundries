@@ -1,0 +1,37 @@
+name: kas checkout
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  KAS_CLONE_DEPTH: 1
+
+jobs:
+  checkout:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target:
+          - qemuarm64
+          - qemuarm64-secureboot
+    name: ${{ matrix.target }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Set up kas-container
+        run: |
+          KAS_CONTAINER=$RUNNER_TEMP/kas-container
+          echo "KAS_CONTAINER=$KAS_CONTAINER" >> $GITHUB_ENV
+          LATEST=$(git ls-remote --tags --refs --sort="v:refname" https://github.com/siemens/kas | tail -n1 | sed 's/.*\///')
+          wget -qO "$KAS_CONTAINER" https://raw.githubusercontent.com/siemens/kas/refs/tags/$LATEST/kas-container
+          chmod +x "$KAS_CONTAINER"
+
+      - name: kas checkout ${{ matrix.target }}
+        run: |
+          "$KAS_CONTAINER" checkout ci/${{ matrix.target }}.yml
