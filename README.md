@@ -4,10 +4,10 @@ A collection of recipes that make up the Foundries.io update solution.
 
 ## Getting in Contact
 
-How to contact maintainers. E.g. GitHub Issues, GitHub Discussions could be indicated for many cases. However a mail list or list of Maintainer e-mails could be shared for other types of discussions. E.g.
-
-* [Report an Issue on GitHub](../../issues)
-* [Open a Discussion on GitHub](../../discussions)
+* [Report an Issue on GitHub](../../issues) — for bugs, build failures, and
+  feature requests.
+* To report a security vulnerability, follow the process in
+  [SECURITY.md](SECURITY.md).
 
 ## Maintainer(s)
 
