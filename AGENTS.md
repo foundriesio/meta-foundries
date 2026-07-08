@@ -1,0 +1,167 @@
+# Agent Guide for meta-foundries
+
+This file guides automation agents to run builds / checks the same way CI does:
+
+- use **kas-container** (isolated from host),
+- keep `DL_DIR` and `SSTATE_DIR` outside the repo so caches are shared,
+- run `yocto-patchreview` routinely, and run `yocto-check-layer` before
+  opening/updating a PR, via the CI helper scripts.
+
+> **Source of truth:** the code in this layer is authoritative. This guide and
+> anything under `docs/` are complementary — when they disagree with the
+> recipes, classes, and `conf/` in the tree, the code wins. Verify behavior
+> against the sources rather than assuming the docs are current.
+
+## Project Overview
+
+meta-foundries is an OpenEmbedded / Yocto Project layer: a collection of recipes
+that make up the Foundries.io update solution. It is a software layer (it depends
+on `core` and ships no machines of its own); the reference build targets the
+`qemuarm64` and `qemuarm64-secureboot` machines provided by OpenEmbedded-Core and
+meta-arm.
+
+## 1) Prerequisites
+
+1. `kas-container` available on PATH, or set `KAS_CONTAINER=/abs/path/to/kas-container`
+   (from [kas-container](https://github.com/siemens/kas/blob/master/kas-container)).
+2. Container runtime access (Docker/Podman backend used by `kas-container`).
+3. Work directories outside the repository for build outputs and shared caches.
+
+### Container runtime smoke test (required order)
+
+Run Docker first:
+
+```sh
+docker run --rm hello-world
+```
+
+Then check Podman:
+
+```sh
+if command -v podman >/dev/null 2>&1; then
+  podman run --rm hello-world
+else
+  echo "podman not installed; continue with Docker backend"
+fi
+```
+
+Notes:
+
+- Do not use `sudo` unless the host setup explicitly requires it.
+- Do not create or modify user groups as part of this workflow.
+- If Podman is unavailable, Docker-only operation is acceptable.
+
+## 2) Recommended environment
+
+If `KAS_WORK_DIR`, `DL_DIR`, and `SSTATE_DIR` are already set in the environment, use them
+directly — do not override them. Only set defaults when they are absent:
+
+```sh
+export REPO_DIR="$(pwd)"                                      # meta-foundries checkout
+export KAS_WORK_DIR="${KAS_WORK_DIR:-/path/to/kas-work}"      # outside repo to avoid polling the checkout
+export DL_DIR="${DL_DIR:-/path/to/shared-cache/downloads}"
+export SSTATE_DIR="${SSTATE_DIR:-/path/to/shared-cache/sstate-cache}"
+mkdir -p "${DL_DIR}" "${SSTATE_DIR}" "${KAS_WORK_DIR}"
+```
+
+## 3) Build with kas-container (CI style)
+
+CI build composition pattern:
+`ci/<machine>.yml`
+
+Each machine file includes `ci/base.yml`, so a single argument is enough.
+
+Example:
+
+```sh
+export KAS_YAMLS="ci/qemuarm64.yml"
+"${KAS_CONTAINER:-kas-container}" build "${KAS_YAMLS}"
+```
+
+The `qemuarm64-secureboot` machine additionally pulls in the `meta-arm` layer
+(declared in `ci/qemuarm64-secureboot.yml`):
+
+```sh
+"${KAS_CONTAINER:-kas-container}" build ci/qemuarm64-secureboot.yml
+```
+
+## 4) Run routine checks via CI helper scripts
+
+For routine local validation, run:
+
+```sh
+ci/kas-container-shell-helper.sh ci/yocto-patchreview.sh
+```
+
+Run `yocto-check-layer` only before opening/updating a pull request:
+
+```sh
+ci/kas-container-shell-helper.sh ci/yocto-check-layer.sh
+```
+
+## 5) Direct kas shell alternative (no helper wrapper)
+
+For one-off commands:
+
+```sh
+kas-container shell --skip repos_checkout ci/qemuarm64.yml -c "bitbake <target>"
+```
+
+Use the helper scripts for CI parity whenever possible.
+
+## 6) Pull request / contribution workflow
+
+Follow the contribution workflow documented in
+[CONTRIBUTING.md](CONTRIBUTING.md):
+
+1. Target branch: **main**.
+2. Fork `foundriesio/meta-foundries`, clone, and create a topic branch off `main`.
+3. Commit with a DCO sign-off (`git commit -s`).
+4. Rebase on latest upstream `main` (`git pull --rebase upstream main`).
+5. Push to your fork and open a GitHub pull request against `main`.
+6. Use PR discussion for review iteration.
+
+Before opening/updating a PR, run CI-equivalent checks:
+
+```sh
+ci/kas-container-shell-helper.sh ci/yocto-patchreview.sh
+ci/kas-container-shell-helper.sh ci/yocto-check-layer.sh
+```
+
+When the change touches `docs/`, also lint the prose with Vale (a PR check in
+CI). Both the `ci/` check scripts and the Vale workflow are described in
+[docs/ci-scripts.md](docs/ci-scripts.md).
+
+## 7) Commit message best practices (project style)
+
+Follow the requirements in [CONTRIBUTING.md](CONTRIBUTING.md): keep each change
+focused and atomic, write a `component: summary of the change` subject (where
+`component` names the recipe, directory, or file being touched) and a
+plain-English body that explains the problem before the imperative actions, and
+include the mandatory `Signed-off-by` (DCO) trailer (and, when an AI assistant
+helped produce the change, an `Assisted-by` trailer).
+
+When committing programmatically, take the `Signed-off-by` identity from the
+local git configuration and append the trailer explicitly:
+
+```text
+Signed-off-by: $(git config user.name) <$(git config user.email)>
+```
+
+Never fabricate a name or email; always read them from `git config`.
+
+When an AI coding assistant or other advanced tool helped create the change,
+acknowledge it with an `Assisted-by` trailer of the form:
+
+```text
+Assisted-by: AGENT_NAME:MODEL_VERSION [TOOL1] [TOOL2]
+```
+
+`AGENT_NAME` is the AI tool or framework, `MODEL_VERSION` is the specific model
+version used, and `[TOOL1] [TOOL2]` are optional specialized analysis tools.
+Basic development tools (git, gcc, make, editors) should not be listed. For
+example:
+
+```text
+Assisted-by: ExampleAgent:example-model-1.0
+```
