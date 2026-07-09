@@ -54,3 +54,8 @@ rebase from upstream, and create the pull request.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md) for how to contribute, including the
 checks to run before submitting a pull request.
+
+## Documentation
+
+Detailed usage, build, and testing instructions live in the [`docs/`](docs/)
+directory.
