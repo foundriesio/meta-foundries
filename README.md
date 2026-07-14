@@ -9,6 +9,11 @@ How to contact maintainers. E.g. GitHub Issues, GitHub Discussions could be indi
 * [Report an Issue on GitHub](../../issues)
 * [Open a Discussion on GitHub](../../discussions)
 
+## Maintainer(s)
+
+- Daiane Angolini <daiane.angolini@oss.qualcomm.com>
+- Mike Scott <mike.scott@oss.qualcomm.com>
+
 ## License
 
 - *meta-foundries* is licensed under the [MIT](COPYING.MIT) license.
