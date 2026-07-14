@@ -45,3 +45,12 @@ needed and does not have to be enabled in BBLAYERS.
 ## Adding the meta-foundries layer to your build
 
 Run 'bitbake-layers add-layer meta-foundries'
+
+## Contributing
+
+Please submit any patches against the `meta-foundries` layer by using the
+GitHub pull-request feature. Fork the repo, create a branch, do the work,
+rebase from upstream, and create the pull request.
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for how to contribute, including the
+checks to run before submitting a pull request.
