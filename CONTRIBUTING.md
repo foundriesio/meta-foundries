@@ -8,6 +8,23 @@ Your help is essential for keeping this project great and for making it better.
 
 In general, contributors should develop on branches based off of `main` and pull requests should be made against `main`.
 
+## Commit messages
+
+Keep each commit atomic — one logical change per commit, and keep the tree
+buildable after each one.
+
+Use a `component: summary of the change` subject, where `component` names the
+recipe, directory, or file being touched and the summary concisely captures the
+intent (not a file-by-file dump). For example:
+
+- `ci: add yocto-check-layer wrapper`
+- `README: list the layer maintainers`
+- `recipe-name: upgrade vX.Y.Z -> vA.B.C`
+
+Write a plain-English body that first explains the problem or reason for the
+change, then uses the imperative mood ("add", "drop", "enable") to describe the
+actions taken. Do not merely restate what the diff changes line by line.
+
 ## Submitting a pull request
 
 1. Please read our [code of conduct](CODE-OF-CONDUCT.md) and [license](COPYING.MIT).
@@ -53,6 +70,17 @@ In general, contributors should develop on branches based off of `main` and pull
 1. [Submit a pull request](https://github.com/foundriesio/meta-foundries/pulls) from your branch to `main`.
 1. Pat yourself on the back and wait for your pull request to be reviewed.
 
+## Checks to run before submitting a pull request
+
+Run the same checks CI runs from the repository root and make sure they pass:
+
+- [ ] `ci/kas-container-shell-helper.sh ci/yocto-patchreview.sh`
+- [ ] `ci/kas-container-shell-helper.sh ci/yocto-check-layer.sh`
+- [ ] `vale --config=docs/.vale.ini docs/`
+
+See [Running the `ci/` Check Scripts](docs/ci-scripts.md) for what each check
+does and how to run it.
+
 ## Security Analysis of Pull Requests
 
 To maintain the security and integrity of this project, all pull requests from external contributors are automatically scanned using [Semgrep](https://github.com/semgrep/semgrep) to detect insecure coding patterns and potential security flaws.
@@ -78,3 +106,6 @@ Here are a few things you can do that will increase the likelihood of your pull 
 To lint contributions under docs locally, [install vale](https://vale.sh/docs/vale-cli/installation/).
 After vale is installed, navigate to `docs/` and run `vale sync`. 
 To lint a file, run `vale <file-name>`.
+
+For the full local workflow (style sync and linting the way CI does), see the
+Vale section of [Running the `ci/` Check Scripts](docs/ci-scripts.md).
