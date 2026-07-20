@@ -165,3 +165,22 @@ example:
 ```text
 Assisted-by: ExampleAgent:example-model-1.0
 ```
+
+## 8) Code comments
+
+Comments explain **intent — the "why"** behind the code. They never narrate what the
+code does; that is recoverable by reading the code.
+
+- **Minimal.** Use the fewest words that convey the intent. Prefer a single line.
+  Delete comments that only echo the code.
+- **No contrastive phrasing.** State what *is*, positively. Avoid "not X",
+  "instead of", "rather than", "would otherwise", "before the fix", "as opposed to".
+- **Capture only non-obvious context** — load-bearing intent, invariants, and
+  constraints an agent could not reconstruct from the code itself.
+- **Go doc comments** begin with the identifier name and are complete sentences
+  (`// distribute stages …`, not `// stages …`).
+- Stay technically accurate; invent no behavior.
+
+These rules exist because generated comments tend toward verbose, code-narrating,
+contrastive prose that reads as machine-written and ages badly. Write comments a
+human would write on purpose.
