@@ -25,6 +25,12 @@ Write a plain-English body that first explains the problem or reason for the
 change, then uses the imperative mood ("add", "drop", "enable") to describe the
 actions taken. Do not merely restate what the diff changes line by line.
 
+**Line length: keep the subject and every body line to 72 characters or
+fewer, and leave a blank line between the subject and the body.** CI enforces
+this in the Commit Message Check (part of QC Preflight Checks), which fails the
+whole PR on any over-length line. Check your commits locally before pushing
+with `ci/commit-msg-check.sh` (see the checklist below).
+
 ## Submitting a pull request
 
 1. Please read our [code of conduct](CODE-OF-CONDUCT.md) and [license](COPYING.MIT).
@@ -76,6 +82,7 @@ Run the same checks CI runs from the repository root and make sure they pass:
 
 - [ ] `ci/kas-container-shell-helper.sh ci/yocto-patchreview.sh`
 - [ ] `ci/kas-container-shell-helper.sh ci/yocto-check-layer.sh`
+- [ ] `ci/commit-msg-check.sh`
 - [ ] `vale --config=docs/.vale.ini docs/`
 
 See [Running the `ci/` Check Scripts](docs/ci-scripts.md) for what each check
