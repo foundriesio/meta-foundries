@@ -4,7 +4,9 @@ on: [pull_request]
 jobs:
   vale:
     name: runner / vale
-    runs-on: ubuntu-latest
+    runs-on:
+      group: GHA-prd-foundriesio-SelfHosted-RG
+      labels: [ self-hosted, qcom-u2404, amd64 ]
     steps:
       - uses: actions/checkout@v7
       - uses: vale-cli/vale-action@v2
