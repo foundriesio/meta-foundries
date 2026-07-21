@@ -12,6 +12,10 @@ Run through these before opening a pull request:
       (structure, signatures, and README compliance).
 - [ ] `ci/yocto-patchreview.sh` — runs OpenEmbedded-Core patchreview over the
       layer's patches against the Yocto Project patch guidelines.
+- [ ] `ci/commit-msg-check.sh` — checks each commit message against the CI
+      Commit Message Check rules (non-empty subject and body, blank-line
+      separators, and 72-character subject and body lines). Runs on the host,
+      not in `kas-container`.
 - [ ] `vale --config=docs/.vale.ini docs/` — lints the `docs/` prose with Vale
       (runs on the host, not in `kas-container`).
 
@@ -30,6 +34,26 @@ ci/kas-container-shell-helper.sh ci/yocto-patchreview.sh
 ```
 
 The helper passes the repo and work directories to the script for you.
+
+### Commit Message Check
+
+`ci/commit-msg-check.sh` mirrors the CI Commit Message Check locally. It runs on
+the host, needing only git and the working tree, not `kas-container`. It checks
+every non-merge commit against the same rules. A commit needs a non-empty
+subject and body, blank lines separating the subject, body, and trailers, and
+72-character subject and body lines.
+
+By default it checks the commits on the current branch that are not yet on
+`main`. Pass a revision range to override:
+
+```sh
+ci/commit-msg-check.sh                  # main..HEAD (default)
+ci/commit-msg-check.sh origin/main..HEAD
+ci/commit-msg-check.sh HEAD~3..HEAD
+```
+
+It exits non-zero and lists the offending commit and line when a message
+violates the rules, matching the CI failure.
 
 ### Linting Docs With Vale
 
