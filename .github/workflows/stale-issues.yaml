@@ -9,7 +9,9 @@ permissions:
 
 jobs:
   stale:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: GHA-prd-foundriesio-SelfHosted-RG
+      labels: [ self-hosted, qcom-u2404, amd64 ]
     steps:
     - uses: actions/stale@v10
       with:

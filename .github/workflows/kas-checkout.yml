@@ -11,7 +11,9 @@ env:
 
 jobs:
   checkout:
-    runs-on: ubuntu-latest
+    runs-on:
+      group: GHA-prd-foundriesio-SelfHosted-RG
+      labels: [ self-hosted, qcom-u2404, amd64 ]
     strategy:
       fail-fast: false
       matrix:
