@@ -29,6 +29,15 @@ branch: master
 revision: HEAD
 ```
 
+```text
+URI: https://git.openembedded.org/meta-openembedded
+layers: meta-oe
+branch: master
+revision: HEAD
+```
+
+meta-oe carries the `libp11` recipe that the device-register build needs.
+
 This layer has an optional dependency on the meta-arm layer:
 
 ```text

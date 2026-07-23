@@ -20,6 +20,12 @@ repos:
     layers:
       meta:
 
+  meta-openembedded:
+    url: https://git.openembedded.org/meta-openembedded
+    branch: master
+    layers:
+      meta-oe:
+
 local_conf_header:
   base: |
     CONF_VERSION = "2"
