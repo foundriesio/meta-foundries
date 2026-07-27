@@ -71,13 +71,13 @@ jobs:
           persist-credentials: false
 
       - name: Download kas lockfile
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: kas-lockfile-${{ matrix.target }}
           path: ci
 
       - name: Download kas-container
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: kas-container-${{ matrix.target }}
           path: ${{ runner.temp }}
