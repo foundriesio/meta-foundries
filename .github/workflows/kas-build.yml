@@ -42,13 +42,13 @@ jobs:
           "$KAS_CONTAINER" lock ci/${{ matrix.target }}.yml
 
       - name: Upload kas lockfile
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: kas-lockfile-${{ matrix.target }}
           path: ci/${{ matrix.target }}.lock.yml
 
       - name: Upload kas-container
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: kas-container-${{ matrix.target }}
           path: ${{ env.KAS_CONTAINER }}
@@ -100,7 +100,7 @@ jobs:
           "$KAS_CONTAINER" dump --resolve-env --resolve-local --resolve-refs ci/${{ matrix.target }}.yml > kas-build.yml
 
       - name: Upload resolved kas build yaml
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: kas-build-${{ matrix.target }}
           path: kas-build.yml
