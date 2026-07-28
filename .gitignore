@@ -1,1 +1,10 @@
 .styles/
+# the local kas fragment if you want customizations
+/local.yml
+
+# kas artifacts from running `kas build` inside this checkout
+/build/
+/bitbake/
+/openembedded-core/
+/meta-openembedded/
+/meta-arm/
