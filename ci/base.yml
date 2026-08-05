@@ -25,6 +25,15 @@ repos:
     branch: master
     layers:
       meta-oe:
+      meta-python:
+      meta-filesystems:
+      meta-networking:
+
+  meta-updater:
+    url: https://github.com/uptane/meta-updater
+    branch: master
+    layers:
+      .:
 
 local_conf_header:
   base: |
