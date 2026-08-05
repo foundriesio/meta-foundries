@@ -13,8 +13,8 @@ Run through these before opening a pull request:
 - [ ] `ci/yocto-patchreview.sh` — runs OpenEmbedded-Core patchreview over the
       layer's patches against the Yocto Project patch guidelines.
 - [ ] `ci/commit-msg-check.sh` — checks each commit message against the CI
-      Commit Message Check rules (non-empty subject and body, blank-line
-      separators, and 72-character subject and body lines). Runs on the host,
+      Commit Message Check rules. A message needs a non-empty subject and
+      body, blank-line separators, and 72-character lines. Runs on the host,
       not in `kas-container`.
 - [ ] `vale --config=docs/.vale.ini docs/` — lints the `docs/` prose with Vale
       (runs on the host, not in `kas-container`).
@@ -58,9 +58,10 @@ violates the rules, matching the CI failure.
 ### Linting Docs With Vale
 
 Prose under `docs/` is linted with [Vale](https://vale.sh). CI runs it on every
-pull request via `.github/workflows/lint-docs.yml` (reporting through reviewdog,
-`fail_on_error: false` — it annotates but does not block the PR). Unlike the
-checks above, Vale runs on the host, not in `kas-container`.
+pull request via `.github/workflows/lint-docs.yml`, reporting through reviewdog.
+The `fail_on_error: false` setting keeps annotations non-fatal, yet reviewdog
+still exits non-zero once it finds a result in the diff, so the check turns red.
+Unlike the checks above, Vale runs on the host, not in `kas-container`.
 
 Install it with the [Vale install guide](https://vale.sh/docs/install). The
 config at `docs/.vale.ini` pulls the shared `Fio-docs` style; sync it once (and
@@ -78,4 +79,5 @@ vale --config=docs/.vale.ini docs/ci-scripts.md  # a single file
 ```
 
 `MinAlertLevel` is `suggestion`, so expect suggestions, warnings, and errors.
-CI will not fail on them, but fix what you can before opening the PR.
+CI reports any of them on the lines your pull request adds, so clear them
+before pushing.
