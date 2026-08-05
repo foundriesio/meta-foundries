@@ -31,12 +31,22 @@ revision: HEAD
 
 ```text
 URI: https://git.openembedded.org/meta-openembedded
-layers: meta-oe
+layers: meta-oe, meta-python, meta-filesystems, meta-networking
+branch: master
+revision: HEAD
+```
+
+```text
+URI: https://github.com/uptane/meta-updater
+layers: meta-updater (collection "sota")
 branch: master
 revision: HEAD
 ```
 
 meta-oe carries the `libp11` recipe that the device-register build needs.
+meta-updater carries the `asn1c` compiler the update client build needs.
+meta-python, meta-filesystems and meta-networking are there because
+meta-updater and its own dependencies require them.
 
 This layer has an optional dependency on the meta-arm layer:
 

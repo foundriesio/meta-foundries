@@ -33,10 +33,15 @@ CMD="yocto-check-layer"
 CMD="$CMD meta-foundries"
 # Disable auto layer discovery
 CMD="$CMD --no-auto"
-# Layers to process for dependencies. meta-foundries depends on
-# openembedded-layer (meta-oe), so make it available alongside core.
+# Layers to process for dependencies. meta-foundries pulls the OTA client
+# from meta-updater (sota), which in turn wants meta-python and
+# meta-filesystems, so make them all available alongside core.
 CMD="$CMD --dependency $WORK_DIR/openembedded-core/meta"
 CMD="$CMD $WORK_DIR/meta-openembedded/meta-oe"
+CMD="$CMD $WORK_DIR/meta-openembedded/meta-python"
+CMD="$CMD $WORK_DIR/meta-openembedded/meta-filesystems"
+CMD="$CMD $WORK_DIR/meta-openembedded/meta-networking"
+CMD="$CMD $WORK_DIR/meta-updater"
 # Disable automatic testing of dependencies
 CMD="$CMD --no-auto-dependency"
 # Set machines to all machines defined in this layer, if any. meta-foundries is
