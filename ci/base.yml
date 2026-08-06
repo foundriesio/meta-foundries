@@ -1,7 +1,7 @@
 header:
   version: 14
 
-target: core-image-minimal
+target: core-image-full-cmdline
 
 repos:
   meta-foundries:
