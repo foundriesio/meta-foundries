@@ -32,3 +32,9 @@ local_conf_header:
     DISTRO = "nodistro"
     # Add size metadata to OSTree commit objects, allowing update size estimation
     EXTRA_OSTREE_COMMIT += "--generate-sizes"
+
+  fio-device-register: |
+    LMP_FACTORY ?= "default"
+    LMP_FACTORY_TAG ?= "master"
+    OS_RELEASE_FIELDS:append = " LMP_FACTORY LMP_FACTORY_TAG"
+    SOTA_CLIENT ?= ""
