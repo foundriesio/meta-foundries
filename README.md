@@ -67,4 +67,5 @@ checks to run before submitting a pull request.
 ## Documentation
 
 Detailed usage, build, and testing instructions live in the [`docs/`](docs/)
-directory.
+directory. [`docs/COMPONENTS.md`](docs/COMPONENTS.md) lists what the layer
+ships and where each component comes from.
