@@ -1,6 +1,0 @@
-header:
-  version: 14
-
-local_conf_header:
-  sstate-mirrors: |
-    SSTATE_MIRRORS ?= "file://.* http://sstate.yoctoproject.org/all/PATH;downloadfilename=PATH"
