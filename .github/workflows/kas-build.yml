@@ -9,7 +9,8 @@ on:
 env:
   KAS_CLONE_DEPTH: 1
   # Shared cache mount on the self-hosted runners; holds the downloads
-  # folder so DL_DIR persists across builds and sources stay fetched.
+  # and sstate-cache folders so DL_DIR and SSTATE_DIR persist across
+  # builds and both source fetches and prebuilt artifacts are reused.
   CACHE_DIR: /efs/foundries
 
 jobs:
@@ -91,8 +92,9 @@ jobs:
       - name: Set up build variables
         run: |
           echo "KAS_WORK_DIR=${{ runner.temp }}/kas-work-${{ matrix.target }}" >> $GITHUB_ENV
-          mkdir -p "${CACHE_DIR}/downloads"
+          mkdir -p "${CACHE_DIR}/downloads" "${CACHE_DIR}/sstate-cache"
           echo "DL_DIR=${CACHE_DIR}/downloads" >> $GITHUB_ENV
+          echo "SSTATE_DIR=${CACHE_DIR}/sstate-cache" >> $GITHUB_ENV
 
       - name: Dump resolved kas build yaml
         run: |
