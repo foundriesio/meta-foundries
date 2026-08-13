@@ -5,5 +5,6 @@ inherit packagegroup
 
 RDEPENDS:${PN} = "\
     aktualizr-lite \
+    composectl \
     fio-device-register \
 "
