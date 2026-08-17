@@ -17,10 +17,15 @@ inherit go-mod
 
 RDEPENDS:${PN}-dev = "make"
 GO_INSTALL = "${GO_IMPORT}/cmd/composectl"
+
+COMPOSE_APP_STORE_ROOT ?= "/var/sota/reset-apps"
+COMPOSE_APP_COMPOSE_ROOT ?= "/var/sota/compose-apps"
+COMPOSE_APP_BASE_SYSTEM_CONFIG ?= "${libdir}/docker"
+
 GO_EXTRA_LDFLAGS = "\
-    -X '${GO_IMPORT}/cmd/composectl/cmd.storeRoot=/var/sota/reset-apps' \
-    -X '${GO_IMPORT}/cmd/composectl/cmd.composeRoot=/var/sota/compose-apps' \
-    -X '${GO_IMPORT}/cmd/composectl/cmd.baseSystemConfig=/usr/lib/docker' \
+    -X '${GO_IMPORT}/cmd/composectl/cmd.storeRoot=${COMPOSE_APP_STORE_ROOT}' \
+    -X '${GO_IMPORT}/cmd/composectl/cmd.composeRoot=${COMPOSE_APP_COMPOSE_ROOT}' \
+    -X '${GO_IMPORT}/cmd/composectl/cmd.baseSystemConfig=${COMPOSE_APP_BASE_SYSTEM_CONFIG}' \
     -X '${GO_IMPORT}/cmd/composectl/cmd.commit=${SRCREV}' \
 "
 
