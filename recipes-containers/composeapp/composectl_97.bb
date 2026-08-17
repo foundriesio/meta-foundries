@@ -30,6 +30,13 @@ GO_EXTRA_LDFLAGS = "\
 "
 
 do_install:append() {
-    cd ${D}/${bindir}
+    cd ${D}${bindir}
     ln -sf composectl aklite-apps
 }
+
+PACKAGES =+ "${PN}-aklite-apps"
+
+FILES:${PN} = "${bindir}/composectl"
+FILES:${PN}-aklite-apps = "${bindir}/aklite-apps"
+
+RDEPENDS:${PN}-aklite-apps = "${PN}"
