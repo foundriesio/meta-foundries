@@ -5,6 +5,6 @@ inherit packagegroup
 
 RDEPENDS:${PN} = "\
     aktualizr-lite \
-    composectl \
     fio-device-register \
+    ${@d.getVar('COMPOSE_APP_MANAGER') or ''} \
 "

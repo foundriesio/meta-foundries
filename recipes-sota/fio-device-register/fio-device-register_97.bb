@@ -13,7 +13,7 @@ SRC_URI = "git://github.com/foundriesio/lmp-device-register.git;protocol=https;b
 FIO_DEVICE_API ?= "https://api.foundries.io/ota/devices/"
 FIO_OAUTH_API ?= "https://app.foundries.io/oauth"
 
-PACKAGECONFIG ?= "composeapp pkcs11"
+PACKAGECONFIG ?= "${@bb.utils.contains('COMPOSE_APP_MANAGER', 'composectl', 'composeapp', '', d)} pkcs11"
 PACKAGECONFIG[composeapp] = "-DDOCKER_COMPOSE_APP=ON,-DDOCKER_COMPOSE_APP=OFF,"
 PACKAGECONFIG[production] = "-DPRODUCTION=ON,-DPRODUCTION=OFF,"
 PACKAGECONFIG[pkcs11]     = "-DDISABLE_PKCS11=OFF,-DDISABLE_PKCS11=ON,libp11"
