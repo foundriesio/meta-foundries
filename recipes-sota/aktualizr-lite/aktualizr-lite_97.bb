@@ -55,6 +55,10 @@ do_install:append() {
     install -d ${D}${nonarch_libdir}/tmpfiles.d
     install -m 0644 ${UNPACKDIR}/tmpfiles.conf ${D}${nonarch_libdir}/tmpfiles.d/aktualizr-lite.conf
 
+    install -m 0700 -d ${D}${libdir}/sota/conf.d
+    printf "[provision]\nprimary_ecu_hardware_id = \"${MACHINE}\"\n" \
+		> ${D}${libdir}/sota/conf.d/40-hardware-id.toml
+
     for tool in ${D}${bindir}/*; do
         case $(basename ${tool}) in
             aktualizr-lite|aklite-offline) ;;
@@ -73,7 +77,7 @@ FILES:${PN} = "\
     ${bindir}/aktualizr-lite \
     ${systemd_system_unitdir}/aktualizr-lite.service \
     ${nonarch_libdir}/tmpfiles.d/aktualizr-lite.conf \
-    ${libdir}/sota \
+    ${libdir}/sota/conf.d/40-hardware-id.toml \
 "
 FILES:${PN}-lib = "${nonarch_libdir}/libaktualizr_lite.so ${libdir}/libaktualizr.so"
 FILES:${PN}-offline = "${bindir}/aklite-offline"
