@@ -20,6 +20,8 @@ SRC_URI = "\
 
 inherit cmake pkgconfig systemd
 
+PACKAGE_ARCH = "${MACHINE_ARCH}"
+
 PKCS11_ENGINE_PATH = "${libdir}/engines-3/pkcs11.so"
 
 PACKAGECONFIG ?= "libfyaml"
