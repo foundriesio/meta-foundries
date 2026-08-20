@@ -42,8 +42,11 @@ local_conf_header:
     # Add size metadata to OSTree commit objects, allowing update size estimation
     EXTRA_OSTREE_COMMIT += "--generate-sizes"
 
-  packagegroup-fio-ota: |
-    IMAGE_INSTALL:append = " packagegroup-fio-ota"
+  packagegroup-foundries-platform: |
+    IMAGE_INSTALL:append = " packagegroup-foundries-platform"
+
+  packagegroup-foundries-containers: |
+    IMAGE_INSTALL:append = " packagegroup-foundries-containers"
 
   fio-device-register: |
     LMP_FACTORY ?= "default"
