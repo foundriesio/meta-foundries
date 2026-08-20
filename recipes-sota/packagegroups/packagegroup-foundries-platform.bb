@@ -4,7 +4,7 @@ LICENSE = "MIT"
 inherit packagegroup
 
 RDEPENDS:${PN} = "\
-    aktualizr-lite \
+    ${@d.getVar('SOTA_CLIENT') or ''} \
     fio-device-register \
     fioconfig \
 "

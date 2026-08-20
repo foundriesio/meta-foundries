@@ -11,4 +11,4 @@ lands; the layer tree is the source of truth for what actually ships.
 | [`fio-diag`](../recipes-support/fio-diag/fio-diag_1.2.bb) | [`foundriesio/lmp-tools`](https://github.com/foundriesio/lmp-tools/tree/master/device-scripts) | Diagnostic script the fioconfig `diag` remote action runs |
 | [`fioconfig`](../recipes-support/fioconfig/fioconfig_97.bb) | [`foundriesio/fioconfig`](https://github.com/foundriesio/fioconfig) | Device configuration daemon and handlers; remote actions behind the `actions` PACKAGECONFIG, VPN support behind `vpn` |
 | [`packagegroup-foundries-containers`](../recipes-containers/packagegroups/packagegroup-foundries-containers.bb) | — | Installs the compose-app manager named by `COMPOSE_APP_MANAGER` |
-| [`packagegroup-foundries-platform`](../recipes-sota/packagegroups/packagegroup-foundries-platform.bb) | — | Installs the update client, the registration tool, and the configuration daemon |
+| [`packagegroup-foundries-platform`](../recipes-sota/packagegroups/packagegroup-foundries-platform.bb) | — | Installs the OTA client named by `SOTA_CLIENT`, the registration tool, and the configuration daemon |
