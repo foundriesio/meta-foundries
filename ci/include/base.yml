@@ -1,5 +1,7 @@
 header:
   version: 14
+  includes:
+    - ci/include/distro.yml
 
 target: core-image-full-cmdline
 
@@ -38,12 +40,12 @@ repos:
 local_conf_header:
   base: |
     CONF_VERSION = "2"
-    DISTRO = "nodistro"
     # Add size metadata to OSTree commit objects, allowing update size estimation
     EXTRA_OSTREE_COMMIT += "--generate-sizes"
 
   packagegroup-foundries-platform: |
     IMAGE_INSTALL:append = " packagegroup-foundries-platform"
+    IMAGE_INSTALL:remove = "aktualizr aktualizr-info aktualizr-shared-prov"
 
   packagegroup-foundries-containers: |
     IMAGE_INSTALL:append = " packagegroup-foundries-containers"
@@ -52,3 +54,19 @@ local_conf_header:
     LMP_FACTORY ?= "default"
     LMP_FACTORY_TAG ?= "master"
     OS_RELEASE_FIELDS:append = " LMP_FACTORY LMP_FACTORY_TAG"
+
+  dev-rm-work: |
+    INHERIT += "rm_work"
+    # containerd builds a Go module cache under its own GOPATH in ${S}, and Go
+    # leaves those directories read-only, so do_rm_work cannot unlink them.
+    RM_WORK_EXCLUDE += "containerd"
+
+  dev-user: |
+    # Development login only: foundries / fio. The hash is sha512crypt of
+    # the literal password, reproducible with
+    #   openssl passwd -6 -salt FioDev01 fio
+    INHERIT += "extrausers"
+    EXTRA_USERS_PARAMS = "useradd -p '\$6\$FioDev01\$meHdt5WjS8H/83Z4LA1E.cQpF30ztvYoBW8zm9T684PEiLH9Q.nBFWoRn/r.v/Ph/OUdWkVKZBGn9zmu7aySv.' foundries;"
+
+  dev-rootfs-space: |
+    IMAGE_ROOTFS_EXTRA_SPACE = "307200"

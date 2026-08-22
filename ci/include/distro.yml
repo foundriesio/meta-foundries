@@ -1,0 +1,4 @@
+header:
+  version: 14
+  includes:
+    - ci/include/qcom-distro-sota.yml

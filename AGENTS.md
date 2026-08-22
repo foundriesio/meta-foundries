@@ -69,12 +69,12 @@ mkdir -p "${DL_DIR}" "${SSTATE_DIR}" "${KAS_WORK_DIR}"
 CI build composition pattern:
 `ci/<machine>.yml`
 
-Each machine file includes `ci/base.yml`, so a single argument is enough.
+Each machine file includes `ci/include/base.yml`, so a single argument is enough.
 
 Example:
 
 ```sh
-export KAS_YAMLS="ci/qemuarm64.yml"
+export KAS_YAMLS="ci/qemuarm64-secureboot.yml"
 "${KAS_CONTAINER:-kas-container}" build "${KAS_YAMLS}"
 ```
 
@@ -90,13 +90,13 @@ The `qemuarm64-secureboot` machine additionally pulls in the `meta-arm` layer
 For routine local validation, run:
 
 ```sh
-ci/kas-container-shell-helper.sh ci/yocto-patchreview.sh
+ci/scripts/kas-container-shell-helper.sh ci/scripts/yocto-patchreview.sh
 ```
 
 Run `yocto-check-layer` only before opening/updating a pull request:
 
 ```sh
-ci/kas-container-shell-helper.sh ci/yocto-check-layer.sh
+ci/scripts/kas-container-shell-helper.sh ci/scripts/yocto-check-layer.sh
 ```
 
 ## 5) Direct kas shell alternative (no helper wrapper)
@@ -104,7 +104,7 @@ ci/kas-container-shell-helper.sh ci/yocto-check-layer.sh
 For one-off commands:
 
 ```sh
-kas-container shell --skip repos_checkout ci/qemuarm64.yml -c "bitbake <target>"
+kas-container shell --skip repos_checkout ci/qemuarm64-secureboot.yml -c "bitbake <target>"
 ```
 
 Use the helper scripts for CI parity whenever possible.
@@ -124,12 +124,12 @@ Follow the contribution workflow documented in
 Before opening/updating a PR, run CI-equivalent checks:
 
 ```sh
-ci/kas-container-shell-helper.sh ci/yocto-patchreview.sh
-ci/kas-container-shell-helper.sh ci/yocto-check-layer.sh
-ci/commit-msg-check.sh
+ci/scripts/kas-container-shell-helper.sh ci/scripts/yocto-patchreview.sh
+ci/scripts/kas-container-shell-helper.sh ci/scripts/yocto-check-layer.sh
+ci/scripts/commit-msg-check.sh
 ```
 
-`ci/commit-msg-check.sh` runs on the host (git only) and mirrors the CI
+`ci/scripts/commit-msg-check.sh` runs on the host (git only) and mirrors the CI
 Commit Message Check rules: a non-empty subject and body, blank lines
 separating the subject, body, and trailers, and 72-character subject and
 body lines.
@@ -149,7 +149,7 @@ helped produce the change, an `Assisted-by` trailer).
 
 Keep the subject and every body line to 72 characters or fewer, with a blank
 line between the subject and the body. CI's Commit Message Check enforces this
-and fails the PR on any over-length line, so run `ci/commit-msg-check.sh`
+and fails the PR on any over-length line, so run `ci/scripts/commit-msg-check.sh`
 locally before pushing (see the pre-PR checks above).
 
 When committing programmatically, take the `Signed-off-by` identity from the
