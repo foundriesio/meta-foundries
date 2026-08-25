@@ -86,3 +86,7 @@ FILES:${PN}-offline = "${bindir}/aklite-offline"
 
 RDEPENDS:${PN} = "lshw"
 RDEPENDS:${PN} += "${@bb.utils.contains('PACKAGECONFIG', 'aklite-offline', '${PN}-offline', '', d)}"
+
+# Make sure we don't end up with meta-updater's aktualizr components
+RCONFLICTS:${PN} = "aktualizr"
+RCONFLICTS:${PN}-lib = "aktualizr-lib"
