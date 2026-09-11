@@ -100,3 +100,12 @@ do_install:append() {
     install -Dm 0644 ${WORKDIR}/fioconfig.conf ${D}${sysconfdir}/default/fioconfig
 }
 ```
+
+## Include an NFS server in your image
+
+Add it with:
+
+```yaml
+nfs: |
+    IMAGE_INSTALL:append = " nfs-utils"
+```
