@@ -1,6 +1,6 @@
 # Prerequisites
 
-Building this layer uses `kas-container`, which runs the actual build inside a container so it does not depend on host tool versions.
+Building this layer uses `kas-container`, which runs the build inside a container; it does not depend on host tool versions.
 You need:
 
 - **git** — to clone this layer and the layers it pulls in.
@@ -15,7 +15,7 @@ You need:
   export KAS_CONTAINER=/abs/path/to/kas-container
   ```
 
-## Verify the container runtime
+## Verify the Container Runtime
 
 Confirm the runtime works before starting a build.
 Check Docker first:
@@ -34,7 +34,7 @@ fi
 
 Docker-only is fine if Podman is not installed.
 
-## Work directories
+## Work Directories
 
 Point `KAS_WORK_DIR`, `DL_DIR`, and `SSTATE_DIR` outside your checkout so downloads and shared state survive across clones and builds:
 

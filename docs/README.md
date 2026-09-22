@@ -1,12 +1,14 @@
-# meta-foundries documentation
+# meta-foundries Documentation
 
 ## Getting Started
+
  * [Prerequisites](./prereqs.md)
  * Building for your hardware
    * Arduino [UNO Q](./boards/unoq.md)
- * [Update Server Integration](./update-server.md)
+ * [Foundries.io Update Server Integration](./update-server.md)
 
 ## Next Steps
+
  * Common [customizations](./customize.md)
  * Remote actions (including how to add your own)
  * meta-foundries [components](./COMPONENTS.md)

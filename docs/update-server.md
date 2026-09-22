@@ -1,9 +1,9 @@
 # Update Server Integration
 
-Devices built from this layer register with, and pull updates from, the Foundries.io™ [Update Server](https://github.com/foundriesio/update-server).
-Point a build at your own instance with the [Update Server settings customization](./customize.md#set-default-update-server-settings).
+Devices built from this layer use the Foundries.io™ [Update Server] (https://github.com/foundriesio/update-server) for registering and pulling updates.
+Point a build at your instance by customizing the [Update Server settings](./customize.md#set-default-update-server-settings).
 
-## Registering a device
+## Registering a Device
 
 `packagegroup-foundries-platform` installs `fio-device-register` (see [Components](./COMPONENTS.md)).
 On first boot, run it on the device:
@@ -12,13 +12,13 @@ On first boot, run it on the device:
 fio-device-register --factory <factory> --name <device-name> --tags <tag>
 ```
 
-`<factory>` must match a factory the target server knows about.
-See the [Quick Start guide](https://github.com/foundriesio/update-server/blob/main/docs/quick-start.md) for setting up a factory and registering a device against it.
+`<factory>` must match a Factory the target server knows about.
+See the [Quick Start guide](https://github.com/foundriesio/update-server/blob/main/docs/quick-start.md) for setting up an Update Server and registering a device against it.
 
-## Building and pushing an update
+## Building and Pushing an Update
 
 A meta-foundries build produces OSTree content under `${KAS_WORK_DIR}/build/tmp/deploy/images/<machine>/ostree_repo`.
-That directory combined with any compose apps you may have, is what an Update Server upload consumes.
+That directory combined with any compose apps you have, is what an Update Server upload consumes.
 `fiocli`, the Update Server's CLI, uploads it:
 
 ```sh

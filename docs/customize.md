@@ -1,6 +1,8 @@
 # Common Customizations
 
-Each customization below is a kas fragment: save it as its own YAML file (or add the block to one you already maintain) and list it in `KAS_YAMLS` alongside the machine file you build with, e.g.:
+Each customization below is a kas fragment.
+You can save it as its own YAML file, or add the block to one you already maintain.
+List it in `KAS_YAMLS` alongside the machine file you build with, e.g.:
 
 ```sh
 export KAS_YAMLS="ci/qemuarm64-secureboot.yml:my-fragment.yml"
@@ -9,7 +11,7 @@ kas-container build "${KAS_YAMLS}"
 
 See [Prerequisites](./prereqs.md) for getting `kas-container` running.
 
-## Set default Update Server settings
+## Set Default Update Server Settings
 
 `ci/include/base.yml` sets these under its own `fio-device-register:` fragment.
 Override them in your own fragment to point a build at your Update Server instance:
@@ -25,9 +27,9 @@ Override them in your own fragment to point a build at your Update Server instan
 `LMP_FACTORY` is recorded into the image's `/etc/os-release` and used for a client certificates "OU" field.
 See [Update Server Integration](./update-server.md) for how these tie into registering a device.
 
-## Include `sudo` in your image
+## Include `sudo` in Your Image
 
-`core-image-full-cmdline`, the target every `ci/*.yml` machine file builds, does not install `sudo`.
+`core-image-full-cmdline`, the Target every `ci/*.yml` machine file builds, does not install `sudo`.
 Add it with:
 
 ```yaml
@@ -38,7 +40,7 @@ sudo: |
 ## Aktualizr-lite and Fioconfig Polling Interval
 
 Update client logic polls the server every 5 minutes by default.
-You can this by adding new files, so they live in your own layer (a kas `local_conf_header` fragment cannot ship files, only `local.conf` lines).
+You can modify this by adding new files, so that they live in your own layer (a kas `local_conf_header` fragment cannot ship files, only `local.conf` lines).
 
 Add a fragment recipe:
 ```
@@ -101,7 +103,7 @@ do_install:append() {
 }
 ```
 
-## Include an NFS server in your image
+## Include an NFS Server in Your Image
 
 Add it with:
 
