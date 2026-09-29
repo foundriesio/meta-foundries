@@ -7,4 +7,5 @@ RDEPENDS:${PN} = "\
     ${@d.getVar('SOTA_CLIENT') or ''} \
     fio-device-register \
     fioconfig \
+    fio-timesyncd-conf \
 "
