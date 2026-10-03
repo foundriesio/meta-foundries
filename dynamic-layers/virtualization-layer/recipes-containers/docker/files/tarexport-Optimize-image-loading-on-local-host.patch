@@ -33,18 +33,18 @@ Signed-off-by: Ricardo Salveti <ricardo.salveti@oss.qualcomm.com>
  2 files changed, 37 insertions(+), 20 deletions(-)
 
 diff --git a/daemon/internal/image/tarexport/load.go b/daemon/internal/image/tarexport/load.go
-index 285100b..e42ec1d 100644
+index ee1efd7..e60b6bf 100644
 --- a/daemon/internal/image/tarexport/load.go
 +++ b/daemon/internal/image/tarexport/load.go
-@@ -27,6 +27,7 @@ import (
- 	"github.com/moby/moby/v2/daemon/internal/stringid"
+@@ -28,6 +28,7 @@ import (
+ 	"github.com/moby/sys/sequential"
  	"github.com/moby/sys/symlink"
  	"github.com/opencontainers/go-digest"
 +	"github.com/sirupsen/logrus"
  )
  
  func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream io.Writer, quiet bool) (outErr error) {
-@@ -78,8 +79,6 @@ func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream i
+@@ -79,8 +80,6 @@ func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream i
  	}
  
  	var parentLinks []parentLink
@@ -53,7 +53,7 @@ index 285100b..e42ec1d 100644
  
  	for _, m := range manifest {
  		select {
-@@ -87,7 +86,7 @@ func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream i
+@@ -88,7 +87,7 @@ func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream i
  			return ctx.Err()
  		default:
  		}
@@ -62,7 +62,7 @@ index 285100b..e42ec1d 100644
  		if err != nil {
  			return err
  		}
-@@ -118,7 +117,7 @@ func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream i
+@@ -119,7 +118,7 @@ func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream i
  				return ctx.Err()
  			default:
  			}
@@ -71,7 +71,7 @@ index 285100b..e42ec1d 100644
  			if err != nil {
  				return err
  			}
-@@ -142,25 +141,30 @@ func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream i
+@@ -143,25 +142,30 @@ func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream i
  		if err != nil {
  			return err
  		}
@@ -112,7 +112,7 @@ index 285100b..e42ec1d 100644
  	}
  
  	for _, p := range validatedParentLinks(parentLinks) {
-@@ -171,10 +175,6 @@ func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream i
+@@ -172,10 +176,6 @@ func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream i
  		}
  	}
  
@@ -123,7 +123,7 @@ index 285100b..e42ec1d 100644
  	return nil
  }
  
-@@ -244,18 +244,34 @@ func (l *tarexporter) loadLayer(ctx context.Context, filename string, rootFS ima
+@@ -245,18 +245,34 @@ func (l *tarexporter) loadLayer(ctx context.Context, filename string, rootFS ima
  	return l.lss.Register(inflatedLayerData, rootFS.ChainID())
  }
  
