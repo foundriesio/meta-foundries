@@ -17,4 +17,6 @@ SCRIPT=${SCRIPT#$TOPDIR/}
 # on ci the kas-container is not on the default path
 KAS_CONTAINER=${KAS_CONTAINER:-$(which kas-container)}
 
-exec $KAS_CONTAINER shell $TOPDIR/ci/include/base.yml --command "/repo/$SCRIPT /repo /work"
+# base.yml only adds meta-foundries; nodistro.yml provides bitbake, oe-core
+# and the layers meta-foundries depends on.
+exec $KAS_CONTAINER shell $TOPDIR/ci/include/base.yml:$TOPDIR/ci/include/nodistro.yml --command "/repo/$SCRIPT /repo /work"
