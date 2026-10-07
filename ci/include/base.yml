@@ -8,39 +8,6 @@ repos:
     layers:
       .:
 
-  bitbake:
-    url: https://git.openembedded.org/bitbake
-    branch: master
-    layers:
-      .: disabled
-
-  openembedded-core:
-    url: https://git.openembedded.org/openembedded-core
-    branch: master
-    layers:
-      meta:
-
-  meta-openembedded:
-    url: https://git.openembedded.org/meta-openembedded
-    branch: master
-    layers:
-      meta-oe:
-      meta-python:
-      meta-filesystems:
-      meta-networking:
-
-  meta-updater:
-    url: https://github.com/uptane/meta-updater
-    branch: master
-    layers:
-      .:
-
-  meta-virtualization:
-    url: https://git.yoctoproject.org/meta-virtualization
-    branch: master
-    layers:
-      .:
-
 local_conf_header:
   virtualization: |
     SKIP_META_VIRT_SANITY_CHECK = "1"
