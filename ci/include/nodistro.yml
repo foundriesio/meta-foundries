@@ -36,6 +36,7 @@ repos:
       .:
 
 distro: nodistro
+target: core-image-full-cmdline
 
 local_conf_header:
   nodistro-sota: |
