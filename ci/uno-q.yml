@@ -1,18 +1,19 @@
 header:
   version: 14
-  includes:
-    - ci/include/base.yml
-    - ci/include/distro.yml
 
-machine: uno-q
+  includes:
+    - repo: meta-qcom-arduino
+      file: ci/uno-q.yml
+    - repo: meta-qcom-arduino
+      file: ci/qcom-distro.yml
+    - ci/include/base.yml
+
+distro: qcom-distro-sota
 
 repos:
   meta-qcom-arduino:
     url: https://github.com/qualcomm-linux/meta-qcom-arduino
-    path: meta-qcom-arduino
     branch: main
-    layers:
-      .:
 
 local_conf_header:
   dev-adbd: |
