@@ -9,6 +9,7 @@ header:
     - ci/include/base.yml
 
 distro: qcom-distro-sota
+target: core-image-full-cmdline
 
 repos:
   meta-qcom-arduino:
