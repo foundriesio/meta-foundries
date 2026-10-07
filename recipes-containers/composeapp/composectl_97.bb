@@ -13,7 +13,10 @@ SRCREV = "0af6d7702713f36848ae569dc7a6c7f05f1d2abe"
 
 SRC_URI = "git://${GO_IMPORT};protocol=${GO_IMPORT_PROTO};branch=${BRANCH};destsuffix=${GO_SRCURI_DESTSUFFIX}"
 
-inherit go-mod
+inherit go-mod go-mod-update-modules
+
+require ${BPN}-go-mods.inc
+require ${BPN}-licenses.inc
 
 RDEPENDS:${PN}-dev = "make"
 GO_INSTALL = "${GO_IMPORT}/cmd/composectl"
