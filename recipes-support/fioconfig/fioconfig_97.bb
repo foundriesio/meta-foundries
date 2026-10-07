@@ -22,7 +22,10 @@ SRC_URI = "\
 
 UPSTREAM_CHECK_COMMITS = "1"
 
-inherit go-mod systemd
+inherit go-mod go-mod-update-modules systemd
+
+require ${BPN}-go-mods.inc
+require ${BPN}-licenses.inc
 
 PACKAGECONFIG ?= "actions pkcs11"
 PACKAGECONFIG[vpn] = ",,,networkmanager-nmcli wireguard-tools"
