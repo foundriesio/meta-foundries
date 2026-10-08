@@ -1,4 +1,4 @@
-From c80297156c0fbd3419bb98d7bbef4e706251bfc0 Mon Sep 17 00:00:00 2001
+From 962c5e5364d2758b25446f49a50e0bd8bad2acc5 Mon Sep 17 00:00:00 2001
 From: Mike Sul <mike.sul@foundries.io>
 Date: Fri, 22 Sep 2023 12:49:07 +0200
 Subject: [PATCH] tarexport: Optimize image loading on local host
@@ -27,24 +27,17 @@ Upstream-Status: Inappropriate [lmp specific]
 Signed-off-by: Mike <mike.sul@foundries.io>
 Signed-off-by: Jose Quaresma <jose.quaresma@foundries.io>
 Signed-off-by: Ricardo Salveti <ricardo.salveti@oss.qualcomm.com>
+Signed-off-by: Mykhaylo Sul <mykhaylo.sul@oss.qualcomm.com>
 ---
- daemon/internal/image/tarexport/load.go      | 56 +++++++++++++-------
+ daemon/internal/image/tarexport/load.go      | 55 +++++++++++++-------
  daemon/internal/image/tarexport/tarexport.go |  1 +
- 2 files changed, 37 insertions(+), 20 deletions(-)
+ 2 files changed, 36 insertions(+), 20 deletions(-)
 
 diff --git a/daemon/internal/image/tarexport/load.go b/daemon/internal/image/tarexport/load.go
-index 285100b..e42ec1d 100644
+index 285100b..1f6ba15 100644
 --- a/daemon/internal/image/tarexport/load.go
 +++ b/daemon/internal/image/tarexport/load.go
-@@ -27,6 +27,7 @@ import (
- 	"github.com/moby/moby/v2/daemon/internal/stringid"
- 	"github.com/moby/sys/symlink"
- 	"github.com/opencontainers/go-digest"
-+	"github.com/sirupsen/logrus"
- )
- 
- func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream io.Writer, quiet bool) (outErr error) {
-@@ -78,8 +79,6 @@ func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream i
+@@ -78,8 +78,6 @@ func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream i
  	}
  
  	var parentLinks []parentLink
@@ -53,7 +46,7 @@ index 285100b..e42ec1d 100644
  
  	for _, m := range manifest {
  		select {
-@@ -87,7 +86,7 @@ func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream i
+@@ -87,7 +85,7 @@ func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream i
  			return ctx.Err()
  		default:
  		}
@@ -62,7 +55,7 @@ index 285100b..e42ec1d 100644
  		if err != nil {
  			return err
  		}
-@@ -118,7 +117,7 @@ func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream i
+@@ -118,7 +116,7 @@ func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream i
  				return ctx.Err()
  			default:
  			}
@@ -71,7 +64,7 @@ index 285100b..e42ec1d 100644
  			if err != nil {
  				return err
  			}
-@@ -142,25 +141,30 @@ func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream i
+@@ -142,25 +140,30 @@ func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream i
  		if err != nil {
  			return err
  		}
@@ -91,7 +84,7 @@ index 285100b..e42ec1d 100644
 +			if refSetErr := l.setLoadedNamedRef(named, imgID.Digest(), outStream); refSetErr == nil {
 +				imageRefs = append(imageRefs, reference.FamiliarString(named))
 +			} else {
-+				logrus.Warnf("failed to set loaded image reference: %s", refSetErr.Error())
++				log.G(ctx).WithError(refSetErr).Warn("failed to set loaded image reference")
  			}
 -			l.setLoadedTag(ref, imgID.Digest(), outStream)
 -			fmt.Fprintf(outStream, "Loaded image: %s\n", reference.FamiliarString(ref))
@@ -107,12 +100,12 @@ index 285100b..e42ec1d 100644
 +			imageIDsStr = fmt.Sprintf("Image loaded; ID: %s", imgID)
 +		}
 +		if _, writeErr := outStream.Write([]byte(imageIDsStr)); writeErr != nil {
-+			logrus.Warnf("failed to output loaded image IDs: %s", writeErr.Error())
++			log.G(ctx).WithError(writeErr).Warn("failed to output loaded image IDs")
 +		}
  	}
  
  	for _, p := range validatedParentLinks(parentLinks) {
-@@ -171,10 +175,6 @@ func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream i
+@@ -171,10 +174,6 @@ func (l *tarexporter) Load(ctx context.Context, inTar io.ReadCloser, outStream i
  		}
  	}
  
@@ -123,7 +116,7 @@ index 285100b..e42ec1d 100644
  	return nil
  }
  
-@@ -244,18 +244,34 @@ func (l *tarexporter) loadLayer(ctx context.Context, filename string, rootFS ima
+@@ -244,18 +243,34 @@ func (l *tarexporter) loadLayer(ctx context.Context, filename string, rootFS ima
  	return l.lss.Register(inflatedLayerData, rootFS.ChainID())
  }
  
@@ -172,3 +165,6 @@ index 631b33f..974a2d2 100644
  }
  
  type tarexporter struct {
+-- 
+2.55.0
+
