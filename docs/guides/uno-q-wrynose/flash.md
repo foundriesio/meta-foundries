@@ -1,10 +1,10 @@
 ---
 title: Flash UNO Q and Connect to the Board
-description: Flash the Qualcomm Linux Wrynose image, access UNO Q with or without a Bughopper, and connect to the network.
+description: Flash the Qualcomm Linux image, access UNO Q with or without a Bughopper, and connect to the network.
 type: page
 doc-category: instructional
 authors: David Griego, Caio Pereira, Codex:GPT-6
-last-edited: 2026-10-07
+last-edited: 2026-10-13
 license: MIT
 access: public
 references:
@@ -29,7 +29,9 @@ Confirm that `workspace/unoq-os1-flash.tar.gz` and `workspace/releases/1/ostree_
 Choose Bughopper serial access or Android Debug Bridge (ADB), then connect Arduino® UNO Q to your network.
 The board will run Qualcomm® Linux® (QLI) after flashing.
 
-> **Validation status:** Source-reviewed draft. The complete build and hardware walkthrough remain pending.
+> **Validation status:** The Bughopper flashing and serial-console steps completed on an UNO Q on October 11 and 13, 2026.
+> This configuration's image was flashed and booted on October 13, and ADB listed the board and opened a root shell.
+> The jumper path has not been run.
 > See [sources and validation](validation.md).
 
 - [Prepare the equipment and flashing tools](#prepare-the-equipment-and-flashing-tools)
@@ -41,9 +43,24 @@ You need an UNO Q, a USB-C data cable, and a network the board can join.
 For Bughopper boot control and serial access, add a Bughopper and a second USB data cable.
 Without a Bughopper, keep a jumper cap or female-to-female jumper available for Emergency Download (EDL) mode.
 
-Download [`qdl` v2.8](https://github.com/linux-msm/qdl/releases/tag/v2.8)
-for Linux x86-64, extract it, and add its directory to `PATH`.
-Keep the supporting files from the `qdl` archive together.
+Install [`qdl` v2.8](https://github.com/linux-msm/qdl/releases/tag/v2.8) on the **local computer**.
+For Ubuntu 24.04 on x86-64:
+
+```bash
+mkdir -p "$HOME/qdl-v2.8"
+cd "$HOME/qdl-v2.8"
+curl -fLO https://github.com/linux-msm/qdl/releases/download/v2.8/qdl-binary-ubuntu-24-x64-v2.8.zip
+unzip -o qdl-binary-ubuntu-24-x64-v2.8.zip
+chmod +x qdl-binary-ubuntu-24-x64/qdl
+export PATH="$HOME/qdl-v2.8/qdl-binary-ubuntu-24-x64:$PATH"
+qdl --version
+```
+
+On Ubuntu 22.04, replace `ubuntu-24` with `ubuntu-22` in the archive and directory names.
+Install `unzip` first if it is missing (`sudo apt install unzip`).
+The last command must print `qdl version v2.8`; an older `qdl` elsewhere on `PATH` prints a different version.
+The archive keeps `qdl` with the libraries it needs, so run it from that directory through `PATH`.
+The `PATH` setting lasts for this shell; repeat the `export` line in any new shell used for flashing.
 
 Install the console tool for your chosen connection:
 
@@ -123,14 +140,18 @@ Open the Bughopper serial port at **115200 baud, 8 data bits, no parity, 1 stop 
 Identify the Bughopper port under `/dev/serial/by-id/` and open it with
 `picocom -b 115200 /dev/serial/by-id/<your-port>`.
 Your account may need membership in the serial device's group, normally `dialout`.
-Log out and back in after changing group membership.
+Check with `ls -lL /dev/serial/by-id/<your-port>` and `id -nG`, add the group if needed, then log out and back in:
+
+```bash
+sudo usermod -aG dialout "$USER"
+```
 
 After flashing, this console displays boot output and provides a Linux shell.
 The supplied development configuration enables root serial autologin.
 
 #### Without a Bughopper
 
-The build configuration explicitly enables `image-adbd` and `enable-adbd`.
+The build configuration enables `image-adbd` and `enable-adbd` and installs the `libcomposite` and `usb_f_fs` kernel modules that the ADB USB gadget uses.
 Keep the UNO Q's USB-C data cable connected after flashing.
 After QLI boots, use ADB to open a shell as described below.
 ADB becomes available after Linux starts; a Bughopper can also show earlier boot output.
@@ -160,6 +181,7 @@ pytactl oneshot bootToEDL --serial "$BUGHOPPER_SERIAL"
 `--serial` identifies the Bughopper USB device; it is separate from the UNO Q's ADB identifier and serial-port path.
 The command cycles board power and asserts EDL through Bughopper.
 Keep both USB cables connected throughout EDL entry and flashing.
+The board can take up to 15 seconds to appear in EDL mode; continue with the check below.
 
 #### Enter EDL With a Jumper
 
@@ -182,8 +204,30 @@ For either procedure, check for the EDL USB device on the host:
 lsusb -d 05c6:9008
 ```
 
+The command prints one line for the board once it is in EDL mode.
+If it prints nothing, wait five seconds and run it again, for up to 30 seconds.
+If the device still does not appear, repeat the EDL entry for your connection.
+
 `qdl` must have USB access; consult its [host instructions](https://github.com/linux-msm/qdl/blob/v2.8/README.md)
 if it cannot open the device.
+
+Identify the UNO Q's EDL serial number so that `qdl` writes to this board only:
+
+```bash
+qdl list
+```
+
+The UNO Q's line begins `05c6:9008`, followed by a tab and its serial number.
+Lines for other kinds of devices begin with a different ID; ignore them.
+Without a serial, `qdl` writes to the first EDL device it finds, which may be another connected board.
+If more than one `05c6:9008` line appears, disconnect the other EDL devices, or run `qdl list` before and after entering EDL
+and take the serial that appeared with the UNO Q.
+**Stop** if the UNO Q's serial is blank or missing, or if you cannot tell which line is the UNO Q's.
+Record the serial for the flash command:
+
+```bash
+export UNOQ_EDL_SERIAL='PASTE_UNOQ_EDL_SERIAL'
+```
 
 ### Write the Image
 
@@ -197,7 +241,7 @@ tar -xzf "$GUIDE_DIR/workspace/unoq-os1-flash.tar.gz" \
 
 ```bash
 cd "$GUIDE_DIR/workspace/flash-os1/core-image-full-cmdline-uno-q.rootfs.qcomflash"
-qdl --storage emmc --debug prog_firehose_ddr.elf rawprogram0.xml patch0.xml
+qdl --storage emmc --serial "$UNOQ_EDL_SERIAL" --debug prog_firehose_ddr.elf rawprogram0.xml patch0.xml
 ```
 
 Use the [Arduino USB permissions setup](https://docs.arduino.cc/software/app-lab/setup/linux/)
@@ -240,18 +284,48 @@ command -v fio-device-register
 command -v aktualizr-lite
 docker version
 nmcli device wifi rescan
-nmcli device wifi list
+nmcli device wifi list | cat
 nmcli --ask device wifi connect "YOUR_WIFI_SSID"
 ip -4 address
 ip route
 date -u
 ```
 
+The `| cat` stops `nmcli` from opening a pager on the serial console.
+If a pager opens anyway, press `q` before typing the next command.
 Enter the Wi-Fi password when prompted.
-Record the board's local-network IP address as `UNOQ_DEVICE_IP` on your computer.
 Confirm that `/etc/os-release` identifies Qualcomm Linux and `BUILD_ID="unoq-wrynose-os-1"`.
+
+Find the board's local-network IPv4 address in the `ip -4 address` output, on the Wi-Fi interface.
+On the **local computer**, record it for the later steps:
+
+```bash
+export UNOQ_DEVICE_IP='PASTE_THE_BOARD_IP'
+```
+
 The board's clock can take tens of seconds to synchronize after Wi-Fi connects.
-Repeat `date -u` until the time is correct before enrolling the board.
+Run `date -u` on the local computer too, and repeat `date -u` on the board until the two agree to within a few seconds.
+Enroll the board only after its clock is correct.
+
+### Verify the Selected Memory Workaround
+
+If you selected the [M-05 overlay](build.md#select-the-boards-memory-configuration) for an affected 4 GB board,
+check the **booted device tree on the UNO Q** before enrollment or any update:
+
+```bash
+M05_NODE=/sys/firmware/devicetree/base/reserved-memory/m05-boundary-guard@7b8ff000
+od -An -tx1 "$M05_NODE/reg"
+test -e "$M05_NODE/no-map" && printf 'no-map present\n'
+```
+
+The `reg` output must contain these 16 bytes, in order:
+`00 00 00 00 7b 8f f0 00 00 00 00 00 01 10 00 00`.
+They encode the start address `0x7b8ff000` and size `0x1100000` in big-endian cells.
+The second command must print `no-map present`.
+If either property is missing or differs, stop and resolve the build or flashed-image mismatch before continuing.
+Save the output in `workspace/board-record.txt`, with the board's RAM size, firmware revision, and resolved build configuration.
+Repeat this check after the OS version 2 reboot if the workaround is selected.
+The live properties are one checkpoint; successful memory and update testing is still required.
 
 **Next:** [Set up the server and register UNO Q](server-registration.md).
-Keep the guide directory, OS repository, lockfile, and Linux build environment for the later update exercises.
+Keep the guide directory, OS repository, build records, and Linux build environment for the later update exercises.

@@ -4,13 +4,15 @@ description: Run the local update server, register the device, and select its ap
 type: page
 doc-category: instructional
 authors: David Griego, Codex:GPT-6
-last-edited: 2026-10-07
+last-edited: 2026-10-13
 license: MIT
 access: public
 references:
-  - https://github.com/foundriesio/update-server/blob/6da3313295010f1bb521a393f15dacf987050254/docs/quick-start.md
-  - https://github.com/foundriesio/update-server/blob/6da3313295010f1bb521a393f15dacf987050254/cmd/server/dev_server.go
-  - https://github.com/foundriesio/update-server/blob/6da3313295010f1bb521a393f15dacf987050254/docs/fiocli.md
+  - https://github.com/foundriesio/update-server/blob/e30762e42e3cd45f730be51d2f0e5aaca2b02363/docs/quick-start.md
+  - https://github.com/foundriesio/update-server/blob/e30762e42e3cd45f730be51d2f0e5aaca2b02363/cmd/server/dev_server.go
+  - https://github.com/foundriesio/update-server/blob/e30762e42e3cd45f730be51d2f0e5aaca2b02363/docs/fiocli.md
+  - https://github.com/foundriesio/meta-foundries/blob/ff40dc16da368d471e890dd19fe945a220ef3ce2/recipes-sota/fio-device-register/fio-device-register_97.bb
+  - https://github.com/foundriesio/lmp-device-register/tree/d8f39a6d95e20f5b64881ae014381682aa1c7aad
 relations:
   prev: flash.md
   next: application-updates.md
@@ -27,7 +29,9 @@ The board must be running OS version 1, connected to your local area network (LA
 Use your local Linux® computer, with the complete guide directory and `GUIDE_DIR` set to its absolute path.
 Keep this host Bash session open for the application exercises so `GUIDE_DIR` and `UNOQ_UUID` remain available.
 
-> **Validation status:** Source-reviewed draft. The complete build and hardware walkthrough remain pending.
+> **Validation status:** These steps completed on an UNO Q on October 11 and 13, 2026, with update-server release v1.0-rc1.
+> On October 13, back-to-back CLI commands hit that release's request-rate limit (HTTP 429), which the source build here raises.
+> This revision's update-server build has not been run on hardware yet.
 > See [sources and validation](validation.md).
 
 - [Start the update server on your computer](#start-the-update-server-on-your-computer)
@@ -38,7 +42,7 @@ Keep this host Bash session open for the application exercises so `GUIDE_DIR` an
 ## Start the Update Server on Your Computer
 
 Run this section in a Bash shell on your **local Linux host** using your regular account.
-It follows the upstream [development-server bootstrap](https://github.com/foundriesio/update-server/blob/6da3313295010f1bb521a393f15dacf987050254/docs/quick-start.md).
+It follows the upstream [development-server bootstrap](https://github.com/foundriesio/update-server/blob/e30762e42e3cd45f730be51d2f0e5aaca2b02363/docs/quick-start.md).
 
 This is a local development server.
 Its enrollment UI uses HTTP, and the UNO Q image enables development console access.
@@ -70,31 +74,74 @@ On the **UNO Q**, edit it as root:
 vi /etc/hosts
 ```
 
-Check resolution on **both the computer and the UNO Q**:
+Check resolution on the **computer**:
 
 ```bash
 getent hosts unoq-update.test
 ```
 
-The result must show the computer's LAN address.
-If that address changes, update both hosts files; keeping the hostname preserves the certificate name.
-Allow inbound Transmission Control Protocol (TCP) connections on ports **8080 and 8443** through the computer's firewall.
-
-### Download and Initialize the Server
-
-Download the x86-64 Linux server and CLI from
-[release v1.0-rc1](https://github.com/foundriesio/update-server/releases/tag/v1.0-rc1),
-the latest release at the source-review date.
-Keep both tools on this release for the walkthrough.
+The board's image has no `getent`, so check it on the **UNO Q** with:
 
 ```bash
+grep unoq-update.test /etc/hosts
+ping -c 1 unoq-update.test
+```
+
+All three commands must show the computer's LAN address, and `ping` must receive a reply.
+If that address changes, update both hosts files; keeping the hostname preserves the certificate name.
+
+Allow inbound Transmission Control Protocol (TCP) connections on ports **8080 and 8443** through the computer's firewall.
+Ubuntu's firewall tool is `ufw`; some distributions use `firewalld`. Check which one is active:
+
+```bash
+sudo ufw status
+sudo firewall-cmd --state
+```
+
+If `ufw` reports `Status: active`, run `sudo ufw allow 8080/tcp` and `sudo ufw allow 8443/tcp`.
+If `firewalld` reports `running`, run `sudo firewall-cmd --add-port=8080/tcp --add-port=8443/tcp`.
+If neither tool is installed or active, the computer has no firewall from either tool to change.
+If your organization manages the computer's firewall, ask its administrator to open the two ports.
+
+### Build and Initialize the Server
+
+This walkthrough uses the server and CLI from update-server `main` at commit
+[`e30762e`](https://github.com/foundriesio/update-server/tree/e30762e42e3cd45f730be51d2f0e5aaca2b02363).
+It raises the server's request-rate limit, which release v1.0-rc1 sets low enough to reject the CLI commands below.
+No release includes that change yet, so build both tools from source on the **local computer**.
+
+The server's web UI files use Git Large File Storage (LFS). Install it first:
+
+```bash
+sudo apt install git-lfs
+```
+
+The build runs in a Go container, so the computer needs no Go toolchain:
+
+```bash
+git clone https://github.com/foundriesio/update-server.git "$GUIDE_DIR/workspace/update-server"
+cd "$GUIDE_DIR/workspace/update-server"
+git checkout e30762e42e3cd45f730be51d2f0e5aaca2b02363
+git lfs pull
+docker run --rm -u "$(id -u):$(id -g)" -e HOME=/tmp -e GOPATH=/tmp/go \
+  -v "$PWD":/src -w /src golang:1.25-bookworm \
+  make COMMIT="$(git describe --tags HEAD)" fioserver fiocli-linux-amd64
 mkdir -p "$GUIDE_DIR/workspace/bin"
-curl -fL https://github.com/foundriesio/update-server/releases/download/v1.0-rc1/fioserver-linux-amd64 \
-  -o "$GUIDE_DIR/workspace/bin/fioserver"
-curl -fL https://github.com/foundriesio/update-server/releases/download/v1.0-rc1/fiocli-linux-amd64 \
-  -o "$GUIDE_DIR/workspace/bin/fiocli"
-chmod +x "$GUIDE_DIR/workspace/bin/fioserver" "$GUIDE_DIR/workspace/bin/fiocli"
+cp bin/fioserver "$GUIDE_DIR/workspace/bin/fioserver"
+cp bin/fiocli-linux-amd64 "$GUIDE_DIR/workspace/bin/fiocli"
 export PATH="$GUIDE_DIR/workspace/bin:$PATH"
+fioserver --version
+fiocli version
+```
+
+Both version commands must print `v1.0-rc1-12-ge30762e`.
+The container's C library is older than Ubuntu 22.04's and 24.04's, so the server built there runs on either.
+Keep both tools at this commit for the walkthrough.
+Once a release includes the rate-limit change, a later revision of this guide downloads that release instead.
+
+Initialize the server's data directory:
+
+```bash
 cd "$GUIDE_DIR/workspace"
 ./bin/fioserver --datadir=./datadir devserver-init --dnsname=unoq-update.test
 ```
@@ -116,6 +163,11 @@ Leave this terminal open; the server runs in the foreground and prints its logs 
 Its data, keys, enrollment records, and updates persist in `workspace/datadir/`.
 Open [the local server](http://unoq-update.test:8080/) and sign in as `admin` / `admin`.
 
+Use a browser on the computer running the server, where the hosts entry resolves `unoq-update.test`.
+A browser on another computer needs the same hosts entry.
+Without that entry, use the server computer's IP address in place of `unoq-update.test`.
+This applies to the server address and to the authorization links printed later; for example, `http://UPDATE_SERVER_HOST_IP:8080/`.
+
 Use the **first host terminal** for CLI and application commands throughout the guide.
 Keep `GUIDE_DIR` and the tools directory on `PATH` in that terminal.
 When opening another host shell for these commands, set `GUIDE_DIR` again and run
@@ -128,7 +180,7 @@ On the **UNO Q**, stop the updater before enrollment, then run:
 
 ```bash
 systemctl stop aktualizr-lite
-fio-device-register \
+DEVICE_FACTORY=unoq-lab fio-device-register \
   --device-api=http://unoq-update.test:8080/v1/devices \
   --oauth-api=http://unoq-update.test:8080/oauth2 \
   --name=unoq-01 \
@@ -138,7 +190,15 @@ fio-device-register \
 Open the authorization link printed by the command in your computer's browser.
 Sign in to the local update server, enter the displayed code if requested, and approve this device.
 Wait for `fio-device-register` to report success on the board.
+Its `Device Name:` line may show the device's identifier in place of its name; the server still lists the device as `unoq-01`.
 The `wrynose` tag must match the updates you upload later.
+
+At this meta-foundries pin, `fio-device-register` is built with `REQUIRE_FACTORY` disabled.
+Its supported flags include `--device-api`, `--oauth-api`, `--name`, and `--tag`; it has no `--factory` option.
+The environment assignment sets the client-side factory label to `unoq-lab` for this command.
+That label enters the authorization scope and certificate organization unit; it does not create a separate factory namespace in the local server.
+Without the assignment, this build defaults to `fio-device-register`, regardless of an `LMP_FACTORY` image setting.
+The image sets `LMP_FACTORY_TAG="wrynose"`; the explicit `--tag=wrynose` selects the same update tag during enrollment.
 
 Check the services on the **UNO Q**:
 
@@ -148,9 +208,23 @@ systemctl --no-pager status aktualizr-lite fioconfig docker
 journalctl -u aktualizr-lite -n 50 --no-pager
 ```
 
+All three services must be `active (running)`.
+Until you upload and roll out the first update, the updater log reports `No Targets are available for the device`; that is expected.
+The server terminal may log `Not found TUF role` for `/repo/2.root.json`.
+That is also expected: the board checks for a newer version of the server's root metadata, and none exists yet.
+
 The image's registration tool requests Compose application support.
 Confirm `/var/sota/sota.toml` contains `type = "ostree+compose_apps"` in its `[pacman]` section.
 Do not print or share the private key from this directory.
+
+Print only the package-manager type, tags, and OS name:
+
+```bash
+awk '/^\[/{pacman=($0 == "[pacman]")} pacman && /^(type|tags|os) = /{print}' /var/sota/sota.toml
+```
+
+Expect `type = "ostree+compose_apps"` and `tags = "wrynose"`, in either order, and **no** `os = ` line.
+Leave `pacman.os` unset so the pinned client's OS-name derivation is exercised.
 
 In the server UI, open **Devices** and find `unoq-01`.
 Confirm a recent device heartbeat, then copy its universally unique identifier (**UUID**).
@@ -174,12 +248,22 @@ export UNOQ_UUID='PASTE_THE_DEVICE_UUID'
 
 ## Select the Applications the Board Should Run
 
-In the same **update-server computer terminal**, select `shellhttpd` for this device and keep its update tag on Wrynose:
+In the same **update-server computer terminal**, select `shellhttpd` for this device and keep its update tag `wrynose`:
 
 ```bash
 fiocli configs updates --device "$UNOQ_UUID" \
   --tag wrynose --apps shellhttpd
 ```
+
+The command prints nothing when it succeeds.
+Check the stored selection:
+
+```bash
+fiocli configs show --device "$UNOQ_UUID"
+```
+
+The listed file must mention `shellhttpd` and `wrynose`.
+After the board's next configuration poll, `fiocli configs applied "$UNOQ_UUID"` shows the configuration it applied.
 
 This records the desired application selection.
 The application starts after an update containing `shellhttpd` is uploaded and rolled out.

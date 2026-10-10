@@ -1,0 +1,9 @@
+header:
+  version: 14
+
+# Optional diagnostic overlay; not part of the normal walkthrough.
+# With download mode enabled, a kernel crash leaves the board in Qualcomm RAM-dump mode
+# until it is power-cycled, so the dump can be collected. Without it, the board resets instead.
+local_conf_header:
+  diag-download-mode: |
+    KERNEL_CMDLINE_EXTRA:append = " qcom_scm.download_mode=1"

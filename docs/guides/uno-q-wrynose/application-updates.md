@@ -4,15 +4,15 @@ description: Deploy shellhttpd, update the OS and app, add a second app, and upd
 type: page
 doc-category: instructional
 authors: David Griego, Codex:GPT-6
-last-edited: 2026-10-01
+last-edited: 2026-10-13
 license: MIT
 access: public
 references:
-  - https://github.com/foundriesio/update-server/blob/6da3313295010f1bb521a393f15dacf987050254/docs/build-an-update.md
-  - https://github.com/foundriesio/update-server/blob/6da3313295010f1bb521a393f15dacf987050254/docs/updates.md
+  - https://github.com/foundriesio/update-server/blob/e30762e42e3cd45f730be51d2f0e5aaca2b02363/docs/build-an-update.md
+  - https://github.com/foundriesio/update-server/blob/e30762e42e3cd45f730be51d2f0e5aaca2b02363/docs/updates.md
   - https://github.com/foundriesio/composeapp/tree/07a5b14b2e55f6882f7323ad6a32e62438aa5098
   - https://github.com/foundriesio/containers/tree/5be067eb56d1cb59dcbf82568f36986705af9a8a/shellhttpd
-  - https://github.com/foundriesio/aktualizr-lite/tree/7bb558258bd64214abf27e4bb6567a17f9cf7854
+  - https://github.com/foundriesio/aktualizr-lite/tree/5d9371869bb83dff10f951d26247cdd4a531bbb7
 relations:
   prev: server-registration.md
   parent: README.md
@@ -25,13 +25,16 @@ relations:
 Complete [server setup and registration](server-registration.md) first, including the initial `shellhttpd` selection.
 Run the four releases below in order; each exercise uses artifacts from the preceding release.
 
-Continue in the same **update-server computer terminal**, with `GUIDE_DIR` and `UNOQ_UUID` set.
+Continue in the same **update-server computer terminal**, with `GUIDE_DIR`, `UNOQ_UUID`, and `UNOQ_DEVICE_IP` set.
 Keep that session open to retain the registry and application variables defined on this page.
 If you open another terminal, restore those variables from your recorded values
 and run `export PATH="$GUIDE_DIR/workspace/bin:$PATH"`.
-Keep the [Linux® build environment](build.md#install-kas-container-and-build-os-version-1), cache paths, and original lockfile for the OS version 2 build.
+Keep the [Linux® build environment](build.md#install-kas-container-and-build-os-version-1), cache paths, and build records for the OS version 2 build.
+The board's image has no `curl`, so this page checks the applications' HTTP responses from the computer.
 
-> **Validation status:** Source-reviewed draft. The complete build and hardware walkthrough remain pending.
+> **Validation status:** All four exercises completed on an UNO Q on October 13, 2026, with update-server release v1.0-rc1.
+> That walkthrough used the previous revision of this page and needed the publish-directory and registry notes added here.
+> This revision's update-server build has not been run on hardware yet.
 > See [sources and validation](validation.md).
 
 - [Package and deliver shellhttpd version 1](#package-and-deliver-shellhttpd-version-1)
@@ -56,8 +59,8 @@ Changing a registry tag such as `latest` alone does not change the digest pinned
 
 The later `--ostree-hash` step supplies the retained OS identity when creating an app-only target on this server.
 aktualizr-lite already supports application-only updates; that flag belongs to the server-side upload command.
-See the client's [app comparison](https://github.com/foundriesio/aktualizr-lite/blob/7bb558258bd64214abf27e4bb6567a17f9cf7854/src/composeappmanager.cc#L221)
-and [unchanged OS handling](https://github.com/foundriesio/aktualizr-lite/blob/7bb558258bd64214abf27e4bb6567a17f9cf7854/src/rootfstreemanager.cc#L175).
+See the client's [app comparison](https://github.com/foundriesio/aktualizr-lite/blob/5d9371869bb83dff10f951d26247cdd4a531bbb7/src/composeappmanager.cc#L221)
+and [unchanged OS handling](https://github.com/foundriesio/aktualizr-lite/blob/5d9371869bb83dff10f951d26247cdd4a531bbb7/src/rootfstreemanager.cc#L175).
 
 ### Install the Packaging Tool
 
@@ -77,14 +80,16 @@ Run packaging commands as the same host account used for Docker registry login.
 
 ### Prepare the Application Registry
 
-This section follows the upstream [Build Apps](https://github.com/foundriesio/update-server/blob/6da3313295010f1bb521a393f15dacf987050254/docs/build-an-update.md#build-apps)
-and [update upload](https://github.com/foundriesio/update-server/blob/6da3313295010f1bb521a393f15dacf987050254/docs/updates.md) workflow.
+This section follows the upstream [Build Apps](https://github.com/foundriesio/update-server/blob/e30762e42e3cd45f730be51d2f0e5aaca2b02363/docs/build-an-update.md#build-apps)
+and [update upload](https://github.com/foundriesio/update-server/blob/e30762e42e3cd45f730be51d2f0e5aaca2b02363/docs/updates.md) workflow.
 It includes both the OSTree repository and the downloaded app/image blobs in the upload.
 
 Use a registry account that can publish a container image and a Compose app.
 Packages may stay private because only the packaging computer accesses the registry.
 
 Use an Open Container Initiative (OCI) registry that supports the artifacts published by `composectl`.
+`composectl pull` reaches the registry only over HTTPS and must trust its certificate.
+A hosted registry meets this; a local registry serving plain HTTP does not.
 Follow its login instructions and set these variables:
 
 ```bash
@@ -117,8 +122,15 @@ docker buildx build --platform linux/arm64 --push \
   "$GUIDE_DIR/workspace/containers/shellhttpd"
 ```
 
-An ARM64 build on Linux may report an unsupported execution platform.
-Configure a native ARM64 builder or Docker's [documented emulation support](https://docs.docker.com/build/building/multi-platform/), then retry.
+An ARM64 build on an x86-64 computer may fail with `exec format error` or an unsupported execution platform.
+Docker's [documented emulation support](https://docs.docker.com/build/building/multi-platform/) registers QEMU for ARM64.
+This privileged command does that until the next reboot:
+
+```bash
+docker run --privileged --rm tonistiigi/binfmt --install arm64
+```
+
+Then retry the build. A native ARM64 builder also works.
 
 Read the pushed digest:
 
@@ -149,7 +161,11 @@ The Compose file pins its image digest and changes the displayed `MSG` value.
 
 ### Publish the Compose App and Download Its Content
 
+`composectl publish` packs the current directory into the app bundle, so run it from the app's own directory.
+From `workspace/`, it tries to pack the build outputs and fails with `app bundle size exceeds the maximum allowed`.
+
 ```bash
+cd "$GUIDE_DIR/workspace/apps/v1"
 composectl publish \
   -f "$GUIDE_DIR/workspace/apps/v1/docker-compose.yml" \
   -d "$GUIDE_DIR/workspace/apps/v1/app.hash" "$APP_REPO:v1" arm64
@@ -187,7 +203,8 @@ fiocli updates tail unoq-001 --rollout first-device
 
 **Uploading stores the content; the rollout makes it available to the selected device.**
 Stop the event display with Ctrl+C after the result appears.
-The updater polls periodically, so a rollout may not start immediately.
+`create-rollout` prints nothing when it succeeds.
+The board checks for updates every five minutes, so the event display can stay quiet that long.
 
 On the **UNO Q**, inspect progress:
 
@@ -195,15 +212,20 @@ On the **UNO Q**, inspect progress:
 journalctl -u aktualizr-lite -f
 ```
 
-After success, stop the log display with Ctrl+C and check:
+After success, stop the log display with Ctrl+C and check that the app's container is running:
 
 ```bash
 docker ps
-curl http://127.0.0.1:8080/
+```
+
+On the **computer**, request the app's page:
+
+```bash
+curl "http://$UNOQ_DEVICE_IP:8080/"
 ```
 
 The response should contain `UNO Q: shellhttpd version 1`.
-From your computer, open `http://UNOQ_DEVICE_IP:8080/`, replacing `UNOQ_DEVICE_IP` with the board's address.
+You can also open `http://UNOQ_DEVICE_IP:8080/` in a browser, replacing `UNOQ_DEVICE_IP` with the board's address.
 The initial OS is already installed, so this first rollout does not demonstrate a change of OS revision.
 
 ## Deliver OS Version 2 and shellhttpd Version 2
@@ -225,11 +247,15 @@ sequenceDiagram
 
 ### Build the Second OS
 
-In the **Linux build environment**, retain the original cache paths and lockfile:
+In the **Linux build environment**, retain the original cache paths and memory-workaround selection.
+Keep the copied local workaround layer unchanged if it was used for OS version 1.
+In a new shell, first set `GUIDE_DIR` and repeat the `export` lines from
+[the OS version 1 build](build.md#install-kas-container-and-build-os-version-1):
 
 ```bash
 cd "$GUIDE_DIR"
-kas-container build kas/uno-q-wrynose.yml:kas/os-v2.yml
+export GUIDE_KAS="$(cat "$GUIDE_DIR/workspace/kas-config")"
+kas-container build "$GUIDE_KAS:kas/os-v2.yml"
 mkdir -p "$GUIDE_DIR/workspace/releases/2"
 cp -a "$KAS_WORK_DIR/build/tmp/deploy/images/uno-q/ostree_repo" \
   "$GUIDE_DIR/workspace/releases/2/ostree_repo"
@@ -248,6 +274,7 @@ mkdir -p "$GUIDE_DIR/workspace/apps/v2"
 sed 's/shellhttpd version 1/shellhttpd version 2/' \
   "$GUIDE_DIR/workspace/apps/v1/docker-compose.yml" \
   > "$GUIDE_DIR/workspace/apps/v2/docker-compose.yml"
+cd "$GUIDE_DIR/workspace/apps/v2"
 composectl publish \
   -f "$GUIDE_DIR/workspace/apps/v2/docker-compose.yml" \
   -d "$GUIDE_DIR/workspace/apps/v2/app.hash" "$APP_REPO:v2" arm64
@@ -291,8 +318,20 @@ cat /etc/os-release
 cat /proc/sys/kernel/random/boot_id
 ostree admin status
 docker ps
-curl http://127.0.0.1:8080/
 journalctl -u aktualizr-lite -n 100 --no-pager
+ip -4 address
+```
+
+For a minute or two after the reboot, `docker ps` can be slow while Docker starts.
+Log lines from before Wi-Fi and the clock come up, such as `curl error 28` or `docker: unknown command: docker compose`, are expected.
+
+The board's Wi-Fi address can change across the reboot.
+This image's Wi-Fi interface takes a new random hardware address at each boot.
+Read the Wi-Fi interface's address from `ip -4 address`. On the **computer**, update `UNOQ_DEVICE_IP` if it changed, then request the page:
+
+```bash
+export UNOQ_DEVICE_IP='PASTE_THE_BOARD_IP'
+curl "http://$UNOQ_DEVICE_IP:8080/"
 ```
 
 Confirm all of the following:
@@ -303,9 +342,12 @@ Confirm all of the following:
 - HTTP returns `UNO Q: shellhttpd version 2`.
 - The server shows a recent heartbeat and a successful update result for `unoq-002`.
 
+If M-05 was selected, repeat the [booted memory-reservation check](flash.md#verify-the-selected-memory-workaround)
+before continuing with application-only updates.
+
 For future updates, use a new update name and a strictly increasing `--version`.
 Increase that version even when only the app changes and the OS stays the same.
-Keep the last successful release directory and its build lockfile for diagnosis and recovery.
+Keep the last successful release directory and its build records for diagnosis and recovery.
 
 ## Add a Second Application Without Updating the OS
 
@@ -391,6 +433,7 @@ sed -e 's/"8080:8080"/"8081:8080"/' \
     -e 's/UNO Q: shellhttpd version 2/UNO Q: statushttpd version 1/' \
   "$GUIDE_DIR/workspace/apps/v2/docker-compose.yml" \
   > "$GUIDE_DIR/workspace/apps/statushttpd-v1/docker-compose.yml"
+cd "$GUIDE_DIR/workspace/apps/statushttpd-v1"
 composectl publish \
   -f "$GUIDE_DIR/workspace/apps/statushttpd-v1/docker-compose.yml" \
   -d "$GUIDE_DIR/workspace/apps/statushttpd-v1/app.hash" "$SECOND_APP_REPO:v1" arm64
@@ -434,7 +477,7 @@ fiocli updates tail unoq-003 --rollout add-status-app
 ```
 
 The selection lists both apps because it replaces the device's explicit app list.
-Configuration and update polling are separate; allow time for both to reach the board.
+Configuration and update polling are separate, and each runs every five minutes; allow up to that long for both to reach the board.
 If an update event completes before the configuration arrives, continue until both applications are running.
 
 ### Verify the Second App and Unchanged OS
@@ -443,11 +486,16 @@ On the **UNO Q**, after the update and configuration have been applied:
 
 ```bash
 docker ps
-curl http://127.0.0.1:8080/
-curl http://127.0.0.1:8081/
 cat /etc/os-release
 ostree admin status
 cmp /var/tmp/unoq-before-app-updates.boot-id /proc/sys/kernel/random/boot_id
+```
+
+On the **computer**:
+
+```bash
+curl "http://$UNOQ_DEVICE_IP:8080/"
+curl "http://$UNOQ_DEVICE_IP:8081/"
 ```
 
 Confirm that port 8080 returns `UNO Q: shellhttpd version 2` and port 8081 returns `UNO Q: statushttpd version 1`.
@@ -455,8 +503,7 @@ The booted OS checksum and `BUILD_ID` must match the recorded baseline.
 `cmp` should exit successfully with no output, confirming that the boot ID has not changed.
 An OS change or reboot is an unexpected result for this walkthrough; investigate before continuing.
 
-From your computer, the new app is also available at `http://UNOQ_DEVICE_IP:8081/`.
-Use the board's actual address, as you did for port 8080.
+In a browser, the new app is at `http://UNOQ_DEVICE_IP:8081/`, using the board's actual address as for port 8080.
 
 ## Update an Existing Application Without Updating the OS
 
@@ -539,6 +586,7 @@ services:
     environment:
       MSG: "UNO Q: shellhttpd version 3"
 EOF
+cd "$GUIDE_DIR/workspace/apps/v3"
 composectl publish \
   -f "$GUIDE_DIR/workspace/apps/v3/docker-compose.yml" \
   -d "$GUIDE_DIR/workspace/apps/v3/app.hash" "$APP_REPO:v3" arm64
@@ -580,13 +628,18 @@ The application container may restart while its replacement is installed; the OS
 On the **UNO Q**, after the update succeeds:
 
 ```bash
-curl -i http://127.0.0.1:8080/
-curl http://127.0.0.1:8081/
 docker ps
 cat /etc/os-release
 ostree admin status
 cmp /var/tmp/unoq-before-app-updates.boot-id /proc/sys/kernel/random/boot_id
 journalctl -u aktualizr-lite -n 100 --no-pager
+```
+
+On the **computer**:
+
+```bash
+curl -i "http://$UNOQ_DEVICE_IP:8080/"
+curl "http://$UNOQ_DEVICE_IP:8081/"
 ```
 
 Confirm all of the following:
