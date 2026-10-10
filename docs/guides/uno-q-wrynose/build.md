@@ -4,11 +4,11 @@ description: Prepare a Linux host, build Qualcomm Linux Wrynose, and preserve th
 type: page
 doc-category: instructional
 authors: David Griego, Codex:GPT-6
-last-edited: 2026-10-01
+last-edited: 2026-10-10
 license: MIT
 access: public
 references:
-  - https://github.com/foundriesio/meta-foundries/tree/4dbe7efc08aef350f247aca83e518a9197c9a31a
+  - https://github.com/foundriesio/meta-foundries/tree/ff40dc16da368d471e890dd19fe945a220ef3ce2
   - https://github.com/qualcomm-linux/meta-qcom-distro/tree/c3e4c471ddf7874b95a9d417a61019af25aa2c5b
   - https://github.com/siemens/kas/tree/5.4
 relations:
@@ -60,7 +60,7 @@ docker buildx version
 
 ### Establish a Working Directory
 
-Copy this entire guide directory to your computer, including `kas/`.
+Copy this entire guide directory to your computer, including `kas/` and `workarounds/`.
 Open a Bash shell in that directory:
 
 ```bash
@@ -92,8 +92,17 @@ ADB is enabled in the shared image so either console path works; Bughopper users
 
 The last two pins supply the integration and machine support.
 The QLI distro and BSP use Wrynose.
-The [companion configuration](kas/uno-q-wrynose.yml) overrides the upstream CI configuration's moving branch selections.
-Do not substitute a plain `ci/uno-q.yml` build command: that configuration selects development branches.
+The [companion configuration](kas/uno-q-wrynose.yml) includes the pinned meta-foundries `ci/include/base.yml`
+and declares the complete Wrynose source and layer list locally.
+This preserves the guide's Arduino and QLI baseline while the upstream `ci/uno-q.yml` evolves its include layout and development-branch locks.
+Use the companion configuration throughout this walkthrough.
+
+The October 10, 2026 revision updates meta-foundries to `ff40dc1`, which selects aktualizr-lite `5d93718` with the OS-name fix.
+The client derives the booted OSTree stateroot, including `nodistro`, when `pacman.os` is unset.
+The guide leaves `pacman.os` unset and requires the OS-update exercise to verify finalization after reboot.
+The Arduino, Qualcomm distro, Qualcomm BSP, and meta-updater pins are deliberately retained from the previous source baseline.
+They are held revisions, not a claim that each is the latest branch tip.
+See [sources and validation](validation.md#october-10-source-reconciliation) for the verification limits.
 
 ### Install kas-container and Build OS Version 1
 
@@ -117,17 +126,82 @@ mkdir -p "$KAS_WORK_DIR" "$DL_DIR" "$SSTATE_DIR"
 Change the cache paths to your existing caches when appropriate.
 Keep the build tree on a case-sensitive Linux filesystem.
 
-Generate a lockfile for the remaining layer revisions, then build:
+### Select the Board's Memory Configuration
+
+Start with the base configuration:
+
+```bash
+export GUIDE_KAS='kas/uno-q-wrynose.yml'
+```
+
+Affected **4 GB UNO Q boards** need the temporary M-05 memory reservation while running the affected firmware.
+Record the board's RAM size and firmware revision before selecting this workaround:
+
+- **RAM size:** UNO Q boards ship with different RAM sizes.
+  Read your board's variant from its product label or purchase record.
+  On a running board, `free -h` is supporting evidence only: reserved memory lowers the total it reports.
+- **Firmware revision:** open the board's serial console as described in [the flashing page](flash.md#with-a-bughopper)
+  and power-cycle the board.
+  The boot firmware prints a line beginning `UEFI Ver` early in the boot output; record that line.
+  For example, an affected 4 GB lab board printed `UEFI Ver : 6.0.260722.BOOT.MXF.1.0.c1-00536-KODIAKLA-2`.
+  This is an example, not a complete list of affected revisions.
+
+The workaround's scope is the observed firmware memory-map issue.
+If you cannot tell whether your board is affected, stop and confirm with the firmware maintainer before building.
+
+The [optional layer](workarounds/meta-unoq-m05/conf/layer.conf) reserves
+`0x7b8ff000` through `0x7c9fefff` (17 MiB), with `no-map`, to keep that window out of Linux allocation and the linear map.
+It carries the [lab diagnostic patch](https://github.com/foundriesio/foundries-open-update-tests/blob/10b030947f7fc30d513428129f36aecc4cd957bc/build/recipes/linux-arduino/0001-arm64-dts-qcom-qrb2210-arduino-imola-reserve-m05-boundary.patch).
+This reduces usable RAM and is a temporary firmware workaround.
+The firmware team's test firmware reportedly fixes the issue; a released fix and reservation-free validation remain pending.
+Retain the reservation on affected boards until the released firmware passes validation without it.
+
+For an affected 4 GB board, copy the supplied layer into the kas work directory and select its overlay:
+
+```bash
+mkdir -p "$KAS_WORK_DIR/meta-unoq-m05"
+cp -a "$GUIDE_DIR/workarounds/meta-unoq-m05/." "$KAS_WORK_DIR/meta-unoq-m05/"
+export GUIDE_KAS="$GUIDE_KAS:kas/m05-4gb.yml"
+```
+
+The overlay's relative repository path resolves under `KAS_WORK_DIR`, including inside kas-container.
+It targets `linux-arduino_7.0` on `uno-q` and intentionally fails if that recipe is absent.
+Its applicability to the retained Arduino pin, patch application, and resulting image still require build validation.
+Do not suppress a dangling-append error or generalize the patch to another kernel or board without reviewing it.
+Use the same selection and layer contents for both OS builds; test firmware changes separately.
+
+### Lock the Sources and Build
+
+When adopting this revised baseline in an existing guide directory, archive the previous
+`kas/uno-q-wrynose.lock.yml` outside `kas/` before running the lock command, and use a fresh build directory.
+An old lockfile can override the new meta-foundries pin.
+Keep that archive with the previous build's records; create a new lock only for the new baseline.
+
+Record your selection, generate the lockfile for the remaining layer revisions, then build:
 
 ```bash
 cd "$GUIDE_DIR"
+printf '%s\n' "$GUIDE_KAS" > "$GUIDE_DIR/workspace/kas-config"
 kas-container lock kas/uno-q-wrynose.yml
-kas-container build kas/uno-q-wrynose.yml:kas/os-v1.yml
+kas-container dump --resolve-refs "$GUIDE_KAS:kas/os-v1.yml" \
+  > "$GUIDE_DIR/workspace/os-v1-resolved.yml"
+cat "$GUIDE_DIR/workspace/os-v1-resolved.yml"
+```
+
+Check that the resolved configuration retains the five explicit commit pins from `kas/uno-q-wrynose.yml`
+and records commits for the remaining repositories from their selected Wrynose branches or BitBake 2.18.
+The lockfile covers floating repositories; the five explicit pins remain in the companion configuration.
+Then build:
+
+```bash
+kas-container build "$GUIDE_KAS:kas/os-v1.yml"
 ```
 
 Retain the generated `kas/uno-q-wrynose.lock.yml` with your build records.
 Use the same lockfile for OS version 2.
 Do not update layer revisions between the two builds in this walkthrough.
+Retain the resolved configuration, `workspace/kas-config`, and the optional layer bytes with the lockfile,
+because kas does not lock a local repository without a URL.
 
 The deployment directory is:
 

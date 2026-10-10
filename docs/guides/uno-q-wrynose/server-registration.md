@@ -4,13 +4,15 @@ description: Run the local update server, register the device, and select its ap
 type: page
 doc-category: instructional
 authors: David Griego, Codex:GPT-6
-last-edited: 2026-10-07
+last-edited: 2026-10-10
 license: MIT
 access: public
 references:
   - https://github.com/foundriesio/update-server/blob/6da3313295010f1bb521a393f15dacf987050254/docs/quick-start.md
   - https://github.com/foundriesio/update-server/blob/6da3313295010f1bb521a393f15dacf987050254/cmd/server/dev_server.go
   - https://github.com/foundriesio/update-server/blob/6da3313295010f1bb521a393f15dacf987050254/docs/fiocli.md
+  - https://github.com/foundriesio/meta-foundries/blob/ff40dc16da368d471e890dd19fe945a220ef3ce2/recipes-sota/fio-device-register/fio-device-register_97.bb
+  - https://github.com/foundriesio/lmp-device-register/tree/d8f39a6d95e20f5b64881ae014381682aa1c7aad
 relations:
   prev: flash.md
   next: application-updates.md
@@ -128,7 +130,7 @@ On the **UNO Q**, stop the updater before enrollment, then run:
 
 ```bash
 systemctl stop aktualizr-lite
-fio-device-register \
+DEVICE_FACTORY=unoq-lab fio-device-register \
   --device-api=http://unoq-update.test:8080/v1/devices \
   --oauth-api=http://unoq-update.test:8080/oauth2 \
   --name=unoq-01 \
@@ -139,6 +141,13 @@ Open the authorization link printed by the command in your computer's browser.
 Sign in to the local update server, enter the displayed code if requested, and approve this device.
 Wait for `fio-device-register` to report success on the board.
 The `wrynose` tag must match the updates you upload later.
+
+At this meta-foundries pin, `fio-device-register` is built with `REQUIRE_FACTORY` disabled.
+Its supported flags include `--device-api`, `--oauth-api`, `--name`, and `--tag`; it has no `--factory` option.
+The environment assignment sets the client-side factory label to `unoq-lab` for this command.
+That label enters the authorization scope and certificate organization unit; it does not create a separate factory namespace in the local server.
+Without the assignment, this build defaults to `fio-device-register`, regardless of an `LMP_FACTORY` image setting.
+The image sets `LMP_FACTORY_TAG="wrynose"`; the explicit `--tag=wrynose` selects the same update tag during enrollment.
 
 Check the services on the **UNO Q**:
 
@@ -151,6 +160,15 @@ journalctl -u aktualizr-lite -n 50 --no-pager
 The image's registration tool requests Compose application support.
 Confirm `/var/sota/sota.toml` contains `type = "ostree+compose_apps"` in its `[pacman]` section.
 Do not print or share the private key from this directory.
+
+Print only the package-manager type and tags:
+
+```bash
+awk '/^\[/{pacman=($0 == "[pacman]")} pacman && /^(type|tags) = /{print}' /var/sota/sota.toml
+```
+
+Expect `type = "ostree+compose_apps"` and `tags = "wrynose"`; their order may differ.
+Leave `pacman.os` unset so the pinned client's OS-name derivation is exercised.
 
 In the server UI, open **Devices** and find `unoq-01`.
 Confirm a recent device heartbeat, then copy its universally unique identifier (**UUID**).

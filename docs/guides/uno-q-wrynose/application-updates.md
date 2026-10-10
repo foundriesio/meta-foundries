@@ -4,7 +4,7 @@ description: Deploy shellhttpd, update the OS and app, add a second app, and upd
 type: page
 doc-category: instructional
 authors: David Griego, Codex:GPT-6
-last-edited: 2026-10-01
+last-edited: 2026-10-10
 license: MIT
 access: public
 references:
@@ -12,7 +12,7 @@ references:
   - https://github.com/foundriesio/update-server/blob/6da3313295010f1bb521a393f15dacf987050254/docs/updates.md
   - https://github.com/foundriesio/composeapp/tree/07a5b14b2e55f6882f7323ad6a32e62438aa5098
   - https://github.com/foundriesio/containers/tree/5be067eb56d1cb59dcbf82568f36986705af9a8a/shellhttpd
-  - https://github.com/foundriesio/aktualizr-lite/tree/7bb558258bd64214abf27e4bb6567a17f9cf7854
+  - https://github.com/foundriesio/aktualizr-lite/tree/5d9371869bb83dff10f951d26247cdd4a531bbb7
 relations:
   prev: server-registration.md
   parent: README.md
@@ -56,8 +56,8 @@ Changing a registry tag such as `latest` alone does not change the digest pinned
 
 The later `--ostree-hash` step supplies the retained OS identity when creating an app-only target on this server.
 aktualizr-lite already supports application-only updates; that flag belongs to the server-side upload command.
-See the client's [app comparison](https://github.com/foundriesio/aktualizr-lite/blob/7bb558258bd64214abf27e4bb6567a17f9cf7854/src/composeappmanager.cc#L221)
-and [unchanged OS handling](https://github.com/foundriesio/aktualizr-lite/blob/7bb558258bd64214abf27e4bb6567a17f9cf7854/src/rootfstreemanager.cc#L175).
+See the client's [app comparison](https://github.com/foundriesio/aktualizr-lite/blob/5d9371869bb83dff10f951d26247cdd4a531bbb7/src/composeappmanager.cc#L221)
+and [unchanged OS handling](https://github.com/foundriesio/aktualizr-lite/blob/5d9371869bb83dff10f951d26247cdd4a531bbb7/src/rootfstreemanager.cc#L175).
 
 ### Install the Packaging Tool
 
@@ -225,11 +225,13 @@ sequenceDiagram
 
 ### Build the Second OS
 
-In the **Linux build environment**, retain the original cache paths and lockfile:
+In the **Linux build environment**, retain the original cache paths, lockfile, and memory-workaround selection.
+Keep the copied local workaround layer unchanged if it was used for OS version 1:
 
 ```bash
 cd "$GUIDE_DIR"
-kas-container build kas/uno-q-wrynose.yml:kas/os-v2.yml
+export GUIDE_KAS="$(cat "$GUIDE_DIR/workspace/kas-config")"
+kas-container build "$GUIDE_KAS:kas/os-v2.yml"
 mkdir -p "$GUIDE_DIR/workspace/releases/2"
 cp -a "$KAS_WORK_DIR/build/tmp/deploy/images/uno-q/ostree_repo" \
   "$GUIDE_DIR/workspace/releases/2/ostree_repo"
@@ -302,6 +304,9 @@ Confirm all of the following:
 - The booted OSTree deployment changed and the updater reports success.
 - HTTP returns `UNO Q: shellhttpd version 2`.
 - The server shows a recent heartbeat and a successful update result for `unoq-002`.
+
+If M-05 was selected, repeat the [booted memory-reservation check](flash.md#verify-the-selected-memory-workaround)
+before continuing with application-only updates.
 
 For future updates, use a new update name and a strictly increasing `--version`.
 Increase that version even when only the app changes and the OS stays the same.

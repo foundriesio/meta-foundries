@@ -4,7 +4,7 @@ description: Flash the Qualcomm Linux Wrynose image, access UNO Q with or withou
 type: page
 doc-category: instructional
 authors: David Griego, Caio Pereira, Codex:GPT-6
-last-edited: 2026-10-07
+last-edited: 2026-10-10
 license: MIT
 access: public
 references:
@@ -185,6 +185,22 @@ lsusb -d 05c6:9008
 `qdl` must have USB access; consult its [host instructions](https://github.com/linux-msm/qdl/blob/v2.8/README.md)
 if it cannot open the device.
 
+Identify the UNO Q's EDL serial number so that `qdl` writes to this board only:
+
+```bash
+qdl list
+```
+
+Each EDL device prints one line, `05c6:9008` followed by a tab and its serial number.
+Without a serial, `qdl` writes to the first EDL device it finds, which may be another connected board.
+If more than one line appears, disconnect the other EDL devices, or run `qdl list` before and after entering EDL
+and take the serial that appeared with the UNO Q.
+Record it for the flash command:
+
+```bash
+export UNOQ_EDL_SERIAL='PASTE_UNOQ_EDL_SERIAL'
+```
+
 ### Write the Image
 
 On the **local computer**, extract the flash archive:
@@ -197,7 +213,7 @@ tar -xzf "$GUIDE_DIR/workspace/unoq-os1-flash.tar.gz" \
 
 ```bash
 cd "$GUIDE_DIR/workspace/flash-os1/core-image-full-cmdline-uno-q.rootfs.qcomflash"
-qdl --storage emmc --debug prog_firehose_ddr.elf rawprogram0.xml patch0.xml
+qdl --storage emmc --serial "$UNOQ_EDL_SERIAL" --debug prog_firehose_ddr.elf rawprogram0.xml patch0.xml
 ```
 
 Use the [Arduino USB permissions setup](https://docs.arduino.cc/software/app-lab/setup/linux/)
@@ -252,6 +268,26 @@ Record the board's local-network IP address as `UNOQ_DEVICE_IP` on your computer
 Confirm that `/etc/os-release` identifies Qualcomm Linux and `BUILD_ID="unoq-wrynose-os-1"`.
 The board's clock can take tens of seconds to synchronize after Wi-Fi connects.
 Repeat `date -u` until the time is correct before enrolling the board.
+
+### Verify the Selected Memory Workaround
+
+If you selected the [M-05 overlay](build.md#select-the-boards-memory-configuration) for an affected 4 GB board,
+check the **booted device tree on the UNO Q** before enrollment or any update:
+
+```bash
+M05_NODE=/sys/firmware/devicetree/base/reserved-memory/m05-boundary-guard@7b8ff000
+od -An -tx1 "$M05_NODE/reg"
+test -e "$M05_NODE/no-map" && printf 'no-map present\n'
+```
+
+The `reg` output must contain these 16 bytes, in order:
+`00 00 00 00 7b 8f f0 00 00 00 00 00 01 10 00 00`.
+They encode the start address `0x7b8ff000` and size `0x1100000` in big-endian cells.
+The second command must print `no-map present`.
+If either property is missing or differs, stop and resolve the build or flashed-image mismatch before continuing.
+Save the output with the board's RAM size, firmware revision, and build lockfile.
+Repeat this check after the OS version 2 reboot if the workaround is selected.
+The live properties are one checkpoint; successful memory and update testing is still required.
 
 **Next:** [Set up the server and register UNO Q](server-registration.md).
 Keep the guide directory, OS repository, lockfile, and Linux build environment for the later update exercises.

@@ -4,11 +4,11 @@ description: Build, flash, register, select applications, and deliver OS and app
 type: page
 doc-category: informational
 authors: David Griego, Codex:GPT-6
-last-edited: 2026-10-01
+last-edited: 2026-10-10
 license: MIT
 access: public
 references:
-  - https://github.com/foundriesio/meta-foundries/tree/4dbe7efc08aef350f247aca83e518a9197c9a31a
+  - https://github.com/foundriesio/meta-foundries/tree/ff40dc16da368d471e890dd19fe945a220ef3ce2
   - https://github.com/qualcomm-linux/meta-qcom-distro/tree/c3e4c471ddf7874b95a9d417a61019af25aa2c5b
   - https://github.com/foundriesio/update-server/blob/6da3313295010f1bb521a393f15dacf987050254/docs/quick-start.md
   - https://github.com/foundriesio/update-server/blob/6da3313295010f1bb521a393f15dacf987050254/docs/updates.md
@@ -45,6 +45,9 @@ The walkthrough includes these checkpoints:
 > **Validation status:** The commands and configuration were checked against the sources listed in
 > [validation.md](validation.md). This exact combination has not completed a build or physical UNO Q walkthrough.
 
+Before building for an affected 4 GB board, select the [temporary M-05 memory workaround](build.md#select-the-boards-memory-configuration).
+Its use and eventual removal require recording the board and firmware revision.
+
 ## Understand the Setup
 
 ```mermaid
@@ -76,7 +79,7 @@ The example also uses `8080`, on the **board's IP address**.
 - [Building updates and Compose apps](https://github.com/foundriesio/update-server/blob/6da3313295010f1bb521a393f15dacf987050254/docs/build-an-update.md)
 - [Uploading updates and creating rollouts](https://github.com/foundriesio/update-server/blob/6da3313295010f1bb521a393f15dacf987050254/docs/updates.md)
 - [QLI Wrynose configuration](https://github.com/qualcomm-linux/meta-qcom-distro/tree/c3e4c471ddf7874b95a9d417a61019af25aa2c5b)
-- [meta-foundries integration configuration](https://github.com/foundriesio/meta-foundries/blob/4dbe7efc08aef350f247aca83e518a9197c9a31a/ci/uno-q.yml)
+- [meta-foundries integration configuration](https://github.com/foundriesio/meta-foundries/blob/ff40dc16da368d471e890dd19fe945a220ef3ce2/ci/include/base.yml)
 - [Foundries shellhttpd example](https://github.com/foundriesio/containers/tree/5be067eb56d1cb59dcbf82568f36986705af9a8a/shellhttpd)
 - [Arduino UNO Q manual](https://docs.arduino.cc/tutorials/uno-q/user-manual/)
 - [Arduino Bughopper manual](https://docs.arduino.cc/tutorials/bughopper/user-manual/)

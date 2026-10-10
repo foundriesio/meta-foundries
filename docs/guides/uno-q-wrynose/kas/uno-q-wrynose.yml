@@ -2,7 +2,7 @@ header:
   version: 14
   includes:
     - repo: meta-foundries
-      file: ci/uno-q.yml
+      file: ci/include/base.yml
 
 machine: uno-q
 distro: qcom-distro-sota
@@ -11,34 +11,71 @@ target: core-image-full-cmdline
 repos:
   meta-foundries:
     url: https://github.com/foundriesio/meta-foundries.git
-    commit: 4dbe7efc08aef350f247aca83e518a9197c9a31a
+    commit: ff40dc16da368d471e890dd19fe945a220ef3ce2
     path: meta-foundries
   bitbake:
+    url: https://git.openembedded.org/bitbake
     branch: "2.18"
+    layers:
+      .: disabled
   openembedded-core:
+    url: https://git.openembedded.org/openembedded-core
     branch: wrynose
+    layers:
+      meta:
   meta-openembedded:
+    url: https://git.openembedded.org/meta-openembedded
     branch: wrynose
+    layers:
+      meta-oe:
+      meta-python:
+      meta-filesystems:
+      meta-networking:
+      meta-multimedia:
+      meta-gnome:
+      meta-xfce:
   meta-updater:
+    url: https://github.com/uptane/meta-updater
     branch: wrynose
     commit: 92f4788c30fdcab2d376eb9ae6b191bda7d06d0a
+    layers:
+      .:
   meta-virtualization:
+    url: https://git.yoctoproject.org/meta-virtualization
     branch: wrynose
+    layers:
+      .:
   meta-qcom:
+    url: https://github.com/qualcomm-linux/meta-qcom
     branch: wrynose
     commit: 18fe56873dc425b0bb6c3a7e7b01af0c14005288
+    layers:
+      .:
   meta-qcom-distro:
+    url: https://github.com/qualcomm-linux/meta-qcom-distro
     branch: wrynose
     commit: c3e4c471ddf7874b95a9d417a61019af25aa2c5b
+    layers:
+      .:
   meta-qcom-arduino:
+    url: https://github.com/qualcomm-linux/meta-qcom-arduino
     # This repository has no Wrynose branch. This pinned revision declares
     # LAYERSERIES_COMPAT_qcom-arduino = "wrynose".
     branch: main
     commit: 35f3dfdd4dca56d0df60b621ff8fd70a8043bcfd
+    layers:
+      .:
   meta-selinux:
+    url: https://git.yoctoproject.org/meta-selinux
     branch: wrynose
+    layers:
+      .:
   meta-security:
+    url: https://git.yoctoproject.org/meta-security
     branch: wrynose
+    layers:
+      .:
+      meta-tpm:
   meta-lts-mixins:
     url: https://git.yoctoproject.org/meta-lts-mixins
     branch: wrynose/linux-firmware
@@ -49,10 +86,20 @@ repos:
 
 local_conf_header:
   guide-identity: |
-    LMP_FACTORY = "unoq-lab"
     LMP_FACTORY_TAG = "wrynose"
     FIO_DEVICE_API = "http://unoq-update.test:8080/v1/devices"
     FIO_OAUTH_API = "http://unoq-update.test:8080/oauth2"
   guide-adb: |
     IMAGE_CLASSES += "image-adbd"
     EXTRA_IMAGE_FEATURES += "enable-adbd"
+  rootfs-growth: |
+    IMAGE_INSTALL:append = " resize-rootfs"
+  # Retained from meta-qcom ci/base.yml (18fe568), which this explicit configuration no longer includes.
+  clo-mirrors: |
+    MIRRORS:append = " \
+    git://github.com git://git.codelinaro.org/clo/yocto-mirrors/github/ \
+    git://.*/ git://git.codelinaro.org/clo/yocto-mirrors/ \
+    https://.*/.*/ https://artifacts.codelinaro.org/codelinaro-le/ \
+    "
+  systemd-watchdog: |
+    WATCHDOG_RUNTIME_SEC:pn-systemd = "30"
