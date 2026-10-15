@@ -1,0 +1,32 @@
+From: David Griego <dgriego@quicinc.com>
+Subject: [PATCH] arm64: dts: qcom: qrb2210-arduino-imola: reserve M-05 boundary window
+
+Lab diagnostic only. UEFI advertises 0x7b8ff000-0x7c9fefff as conventional
+memory while the bootloader memory fixup ends the bank at 0x7b8fefff. Pages
+in this window raised synchronous external aborts during OSTree deployment
+(UNO Q M-05). Keep the window out of the linear map and the allocator.
+
+Upstream-Status: Inappropriate [lab diagnostic; not for upstream]
+---
+ arch/arm64/boot/dts/qcom/qrb2210-arduino-imola-base.dts | 13 +++++++++++++
+ 1 file changed, 13 insertions(+)
+
+--- a/arch/arm64/boot/dts/qcom/qrb2210-arduino-imola-base.dts
++++ b/arch/arm64/boot/dts/qcom/qrb2210-arduino-imola-base.dts
+@@ -689,3 +689,16 @@
+ &xo_board {
+ 	clock-frequency = <38400000>;
+ };
++
++&reserved_memory {
++	/*
++	 * UNO Q M-05 lab diagnostic: UEFI advertises 0x7b8ff000-0x7c9fefff as
++	 * conventional RAM while the bootloader memory fixup ends the bank at
++	 * 0x7b8fefff. Pages here raised synchronous external aborts during
++	 * OSTree deployment. Keep the window out of the linear map/allocator.
++	 */
++	m05_boundary_guard: m05-boundary-guard@7b8ff000 {
++		reg = <0x0 0x7b8ff000 0x0 0x1100000>;
++		no-map;
++	};
++};

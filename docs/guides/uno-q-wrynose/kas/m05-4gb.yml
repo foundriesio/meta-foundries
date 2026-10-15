@@ -1,0 +1,8 @@
+header:
+  version: 14
+
+repos:
+  meta-unoq-m05:
+    path: meta-unoq-m05
+    layers:
+      .:

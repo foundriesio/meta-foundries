@@ -1,0 +1,67 @@
+---
+title: Troubleshoot the UNO Q Walkthrough
+description: Checks for build, console, enrollment, networking, and application update failures.
+type: page
+doc-category: informational
+authors: David Griego, Codex:GPT-6
+last-edited: 2026-10-13
+license: MIT
+access: public
+references:
+  - https://github.com/foundriesio/meta-foundries/tree/ff40dc16da368d471e890dd19fe945a220ef3ce2
+  - https://github.com/foundriesio/update-server/blob/e30762e42e3cd45f730be51d2f0e5aaca2b02363/docs/quick-start.md
+  - https://github.com/foundriesio/update-server/blob/e30762e42e3cd45f730be51d2f0e5aaca2b02363/docs/updates.md
+  - https://github.com/foundriesio/composeapp/tree/07a5b14b2e55f6882f7323ad6a32e62438aa5098
+  - https://github.com/arduino/docs-content/tree/dab66ecbd6ad52cd742da6c19c5b6330a7f2caae
+relations:
+  parent: README.md
+---
+
+# Troubleshoot the UNO Q Walkthrough
+
+[Guide overview](README.md)
+
+## Troubleshoot a Failed Checkpoint
+
+| Symptom | Check |
+| --- | --- |
+| Resolved commits differ from the [pinned table](build.md#what-is-pinned) | Move any `kas/uno-q-wrynose.lock.yml` from an earlier guide revision out of `kas/`; kas applies it automatically. Build with this revision's `kas/uno-q-wrynose.yml`, not the upstream CI configuration. |
+| kas checkout fails to apply a patch | The OpenEmbedded Core and `meta-selinux` patches come from `meta-qcom` at its pinned commit and fit only the pinned revisions. Check the resolved commits. |
+| BitBake stops at parsing, reports `Nothing PROVIDES`, or fails a `license-format` QA check | These follow from mixing revisions, for example release branches with these layers. Check the resolved commits and remove any old lockfile. |
+| Layer compatibility error | Check the resolved commits and the optional M-05 layer, copied from this guide revision. Do not bypass `LAYERSERIES_COMPAT`. |
+| A pinned revision fails to fetch or build | Keep the pins together: the layers were validated as a set. Keep the error output and `workspace/os-v1-resolved.yml`, and report the failure to meta-foundries. |
+| OS update fails to finalize after reboot | Confirm meta-foundries `ff40dc1` in the resolved configuration (`kas-container dump --resolve-refs kas/uno-q-wrynose.yml`). On the UNO Q, confirm `aktualizr-lite --version` prints `5d93718`. Then inspect the booted deployment and updater logs. The guide relies on the client's OS-name derivation with `pacman.os` unset. |
+| You need a RAM dump after a kernel crash | Rebuild with the optional diagnostic overlay `kas/diag-download-mode.yml` appended to `GUIDE_KAS`. It sets `qcom_scm.download_mode=1`: a crash then leaves the board in Qualcomm RAM-dump mode until power-cycled, instead of resetting. Leave it out for normal use. |
+| Synchronous external abort during deployment on an affected 4 GB board | Check the recorded firmware and [M-05 selection](build.md#select-the-boards-memory-configuration). Preserve logs and confirm the reservation in the booted image before retrying. |
+| M-05 overlay reports a dangling append or failed patch | Stop and check the selected `linux-arduino_7.0` recipe and that the copied layer matches this guide revision. Do not disable the error or widen the append to other versions. |
+| Registration rejects `--factory` | Use the documented `DEVICE_FACTORY=unoq-lab` environment assignment; this build has no `--factory` option. |
+| `pytactl list` finds no Bughopper | Check its USB data cable and connection; confirm the installed `pytactl` version and inspect the host's USB enumeration. |
+| `pytactl` reports access denied or a missing native library | Complete [Bughopper tool installation](flash.md#install-bughopper-tools), including native libraries and device permissions; reconnect Bughopper after installing the rules. |
+| `qdl` waits for a device | Complete [Emergency Download (EDL) entry](flash.md#enter-edl-mode) using Bughopper or a jumper, and allow up to 15 seconds for the board to appear. Verify `05c6:9008`, the UNO Q USB-C data cable, and host USB permissions. |
+| `qdl --version` prints an older version | Another `qdl` comes first on `PATH`. Repeat the [`qdl` installation](flash.md#prepare-the-equipment-and-flashing-tools) `export PATH` line in this shell. |
+| Board stays in EDL after flashing with Bughopper | After `qdl` succeeds, run `pytactl oneshot reset --serial "$BUGHOPPER_SERIAL"` on the host to clear EDL and boot normally. |
+| No Android Debug Bridge (ADB) device after boot | Check that the flashed image contains the enabled ADB configuration; verify USB permissions and normal boot rather than EDL. On the board, `journalctl -u android-tools-adbd` reporting `Module libcomposite not found` means the image lacks the USB gadget modules; rebuild with the guide's `kas/uno-q-wrynose.yml`. |
+| Serial output is unreadable or input fails | Verify the Bughopper port, 115200/8N1 settings, and disabled hardware/software flow control. |
+| The serial console stops responding to commands after `nmcli` | `nmcli` opened a pager. Press `q`, then repeat the command with `\| cat`. |
+| `getent: command not found` on the board | The board's image has no `getent`. Use the `grep` and `ping` checks from [the name check](server-registration.md#give-the-server-a-name-reachable-from-the-board). |
+| `curl: command not found` on the board | The board's image has no `curl`. Run the HTTP checks from the computer with the board's IP address. |
+| Enrollment page opens but registration fails | Read the board's command result; check clock, server-terminal logs, and duplicate device name. |
+| Board cannot reach the server | Check the local-network IP address, hosts entry, listening ports, host firewall, and Wi-Fi client isolation. |
+| TLS hostname error | Verify that `devserver-init --dnsname` matches the hostname in device configuration and hosts entries. |
+| CLI works, but no device heartbeat | Check Transmission Control Protocol (TCP) port 8443 and certificate hostname resolution on the board; CLI access only establishes the 8080 path. |
+| `fiocli` reports status 429, `rate-limit exceeded` | update-server release v1.0-rc1 allows about two requests per second. Use the server and CLI built at [the guide's commit](server-registration.md#build-and-initialize-the-server). With v1.0-rc1, wait 30 seconds, then check with `fiocli configs show` or `fiocli updates list`: the change may already be stored. |
+| An ARM64 build or `docker run --platform linux/arm64` fails with `exec format error` | Register ARM64 emulation with `docker run --privileged --rm tonistiigi/binfmt --install arm64`; it lasts until the computer reboots. |
+| App packaging reports unauthorized | Check host Docker login, credential helpers, `DOCKER_CONFIG`, and package permissions. |
+| `composectl publish` reports `app bundle size exceeds the maximum allowed` | `composectl publish` packs the current directory. Run it from the app's directory, for example `cd "$GUIDE_DIR/workspace/apps/v1"`. |
+| `composectl pull` reports `server gave HTTP response to HTTPS client` | The registry serves plain HTTP. `composectl pull` needs HTTPS with a certificate the computer trusts; use a hosted registry. |
+| App downloads fail after upload | Confirm the upload contained the entire `apps/` tree from `composectl pull --arch arm64`; a digest alone supplies no blobs. |
+| An application-only rollout attempts an OS download or reboot | Confirm `--ostree-hash` exactly matches the board's booted OS checksum; an omitted hash does not mean retain the current OS. |
+| An existing app disappears after adding another | Include both app digests in the target and both names in the device's explicit selection. |
+| `fiocli updates tail` shows no events after a rollout | The board checks for updates every five minutes. Wait, then confirm the rollout with `fiocli updates list` (`DEVICE COUNT`) and the board's `journalctl -u aktualizr-lite`. |
+| Uploaded update never installs | Check that a rollout targets the correct universally unique identifier (UUID), the tag is `wrynose`, the hardware ID is `uno-q`, and the version increases. |
+| App exists but does not run | Check `--apps shellhttpd`, successful fioconfig delivery, updater logs, ARM64 packaging, and available board disk space. |
+| `curl` to the board fails after the OS update reboot | The board's Wi-Fi address may have changed: its Wi-Fi interface takes a new random hardware address at each boot. Run `ip -4 address` on the board and update `UNOQ_DEVICE_IP`. |
+| Browser shows the server UI instead of shellhttpd | Use the UNO Q's IP for the app; `unoq-update.test:8080` is the server UI. |
+
+Record the resolved configuration (`workspace/os-v1-resolved.yml`), host OS, board model, command output, and service logs when reporting a problem.
+Exclude registry tokens, device private keys, and server private keys from shared logs.
