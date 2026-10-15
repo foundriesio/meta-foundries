@@ -1,0 +1,1007 @@
+#!/bin/sh
+# Copyright (c) 2026 Qualcomm Innovation Center, Inc. All rights reserved.
+# SPDX-License-Identifier: MIT
+#
+# fio-readiness: offline meta-foundries readiness inspection.
+#
+# Inspects the running image for Foundries OS Update / Full Update
+# prerequisites. Read-only: never starts services, enrolls, pulls, updates,
+# writes EFI variables, or opens watchdog devices. The checks and the
+# safety basis for each command are documented in README.md.
+
+set -u
+
+SUITE_VERSION="0.1.1-prototype"
+DEFS_REVISION="2026-10-08"
+
+# Test hook: prefix for every inspected filesystem path. Unset on a target.
+R="${FIO_READINESS_TEST_ROOT:-}"
+
+PROFILE="full"
+REPORT=""
+CLIENT="aktualizr-lite"
+CLIENT_SRC="default"
+STATE_DIR="/var/sota"
+STATE_SRC="default"
+QTIMEOUT=10
+EVID_MAX=1500
+
+# Client queries must never reach the real daemon socket; a request to an
+# inactive docker.service would socket-activate dockerd.
+NO_DAEMON="unix:///nonexistent/fio-readiness.sock"
+DOCKER_SOCK="unix:///var/run/docker.sock"
+
+BIN_DIRS="/usr/bin /usr/sbin /bin /sbin /usr/libexec /usr/local/bin"
+
+usage() {
+	cat <<'EOF'
+Usage: fio-readiness [options]
+
+  --profile full|os     Composition to inspect (default: full)
+  --report PATH         Plain-text report path
+                        (default: ./fio-readiness-<host>-<UTC time>.txt)
+  --client NAME         SOTA client executable name (default: aktualizr-lite)
+  --state-dir PATH      Update-state directory (default: /var/sota)
+  --timeout SECONDS     Bound for each local query (default: 10)
+  -h, --help            Show this help
+
+Runs offline, as root, on the target. Inspection only: no updates,
+registration, daemon starts, or firmware operations are performed.
+EOF
+}
+
+die() { printf 'fio-readiness: %s\n' "$*" >&2; exit 2; }
+
+while [ $# -gt 0 ]; do
+	case "$1" in
+	--profile) [ $# -ge 2 ] || die "--profile needs a value"; PROFILE=$2; shift 2 ;;
+	--report) [ $# -ge 2 ] || die "--report needs a value"; REPORT=$2; shift 2 ;;
+	--client) [ $# -ge 2 ] || die "--client needs a value"; CLIENT=$2; CLIENT_SRC="--client"; shift 2 ;;
+	--state-dir) [ $# -ge 2 ] || die "--state-dir needs a value"; STATE_DIR=$2; STATE_SRC="--state-dir"; shift 2 ;;
+	--timeout) [ $# -ge 2 ] || die "--timeout needs a value"; QTIMEOUT=$2; shift 2 ;;
+	-h|--help) usage; exit 0 ;;
+	*) die "unknown option: $1 (see --help)" ;;
+	esac
+done
+
+case "$PROFILE" in
+full|os) ;;
+*) die "--profile must be 'full' or 'os'" ;;
+esac
+case "$QTIMEOUT" in
+''|*[!0-9]*) die "--timeout must be a positive integer" ;;
+esac
+case "$CLIENT" in
+*/*|'') die "--client takes an executable name, not a path" ;;
+esac
+
+p() { printf '%s%s' "$R" "$1"; }
+have() { command -v "$1" >/dev/null 2>&1; }
+
+WORK=$(mktemp -d 2>/dev/null || mktemp -d -t fio-readiness) || die "cannot create a work directory"
+mkdir -p "$WORK/res" || die "cannot create a work directory"
+ORDER="$WORK/order"
+: >"$ORDER"
+
+now_utc() { date -u +%Y-%m-%dT%H:%M:%SZ; }
+START=$(now_utc)
+START_S=$(date +%s 2>/dev/null || echo 0)
+HOST=$(cat "$(p /proc/sys/kernel/hostname)" 2>/dev/null || uname -n 2>/dev/null || echo unknown)
+[ -n "$REPORT" ] || REPORT="./fio-readiness-${HOST}-$(date -u +%Y%m%dT%H%M%SZ).txt"
+PARTIAL="${REPORT}.partial"
+
+# ---------------------------------------------------------------------------
+# Evidence handling
+
+redact() {
+	sed -e '/-----BEGIN/,/-----END/d' \
+	    -e 's/\([Tt][Oo][Kk][Ee][Nn]\|[Pp][Aa][Ss][Ss][Ww][Oo][Rr][Dd]\|[Ss][Ee][Cc][Rr][Ee][Tt]\|[Pp][Ii][Nn]\)\([=:][[:space:]]*\)[^[:space:]]*/\1\2<redacted>/g'
+}
+
+# Bounded, redacted copy of a file's head; records truncation.
+bounded() {
+	_bf=$1
+	_bsize=$(wc -c <"$_bf" 2>/dev/null | tr -d ' ')
+	head -c "$EVID_MAX" "$_bf" 2>/dev/null | redact
+	if [ "${_bsize:-0}" -gt "$EVID_MAX" ]; then
+		printf '\n[truncated: %s of %s bytes shown]' "$EVID_MAX" "$_bsize"
+	fi
+}
+
+# Timeout facility, feature-detected (GNU coreutils / modern or old BusyBox).
+TIMEOUT_STYLE=""
+if have timeout; then
+	if timeout 1 sh -c : >/dev/null 2>&1; then TIMEOUT_STYLE="plain"
+	elif timeout -t 1 sh -c : >/dev/null 2>&1; then TIMEOUT_STYLE="dash-t"
+	fi
+fi
+
+# q CMD...: run one reviewed local query. QRAW is full stdout for parsing
+# (capped, unredacted, never displayed); QOUT is the bounded, redacted
+# stdout and QALL adds stderr, both for evidence; QRC is the exit status.
+q() {
+	_qo="$WORK/q.out" _qe="$WORK/q.err"
+	case "$TIMEOUT_STYLE" in
+	plain) timeout "$QTIMEOUT" "$@" >"$_qo" 2>"$_qe" </dev/null; QRC=$? ;;
+	dash-t) timeout -t "$QTIMEOUT" "$@" >"$_qo" 2>"$_qe" </dev/null; QRC=$? ;;
+	*) QRC=125; : >"$_qo"; printf 'no timeout facility; query not run\n' >"$_qe" ;;
+	esac
+	QRAW=$(head -c 262144 "$_qo")
+	QOUT=$(bounded "$_qo")
+	_qerr=$(bounded "$_qe")
+	QALL=$QOUT
+	[ -n "$_qerr" ] && QALL="$QALL
+[stderr] $_qerr"
+	[ "$QRC" -eq 124 ] && QALL="$QALL
+[timed out after ${QTIMEOUT}s]"
+	return 0
+}
+
+# Locate an executable inside the inspected image (never via $PATH).
+find_bin() {
+	for _d in $BIN_DIRS; do
+		if [ -x "$(p "$_d/$1")" ] && [ ! -d "$(p "$_d/$1")" ]; then
+			printf '%s/%s' "$_d" "$1"
+			return 0
+		fi
+	done
+	return 1
+}
+
+# Value of KEY from `systemctl show` output held in $SHOW.
+prop() { printf '%s\n' "$SHOW" | sed -n "s/^$1=//p" | head -n 1; }
+
+unit_show() {
+	SHOW=$(systemctl show "$@" 2>/dev/null) || SHOW=""
+}
+
+# Longest mountinfo match for PATH; sets M_POINT M_FSTYPE M_OPTS M_ROOT M_SRC.
+mount_for() {
+	_mi=$(p /proc/self/mountinfo)
+	M_POINT="" M_FSTYPE="" M_OPTS="" M_ROOT="" M_SRC=""
+	[ -r "$_mi" ] || return 1
+	_line=$(awk -v path="$1" '
+		{
+			mp = $5; n = 0
+			for (i = 7; i <= NF; i++) if ($i == "-") { n = i; break }
+			if (n == 0) next
+			if (mp == "/" || index(path "/", mp "/") == 1) {
+				if (length(mp) >= blen) { blen = length(mp); best = mp " " $(n+1) " " $6 " " $4 " " $(n+2) }
+			}
+		}
+		END { print best }' "$_mi")
+	[ -n "$_line" ] || return 1
+	# shellcheck disable=SC2086
+	set -- $_line
+	M_POINT=$1 M_FSTYPE=$2 M_OPTS=$3 M_ROOT=$4 M_SRC=${5:-}
+}
+
+existing_parent() {
+	_ep=$1
+	while [ ! -e "$(p "$_ep")" ] && [ "$_ep" != "/" ]; do
+		_ep=$(dirname "$_ep")
+	done
+	printf '%s' "$_ep"
+}
+
+ostree_booted() { [ -e "$(p /run/ostree-booted)" ]; }
+
+# Persistence judgement for a state path; sets J_RES and J_OBS.
+judge_persist() {
+	_jp=$(existing_parent "$1")
+	if ! mount_for "$_jp"; then
+		J_RES=UNKNOWN; J_OBS="no mount information for $_jp"; return
+	fi
+	J_OBS="$1 (nearest existing: $_jp) on $M_POINT type=$M_FSTYPE opts=$M_OPTS root=$M_ROOT source=$M_SRC"
+	case ",$M_OPTS," in
+	*,ro,*) J_RES=FAIL; J_OBS="$J_OBS; mounted read-only"; return ;;
+	esac
+	case "$M_FSTYPE" in
+	tmpfs|ramfs|devtmpfs|overlay|squashfs|erofs|iso9660)
+		J_RES=FAIL; J_OBS="$J_OBS; filesystem type is not persistent writable storage"; return ;;
+	esac
+	if ostree_booted; then
+		case "$M_POINT" in
+		/|/usr) J_RES=FAIL; J_OBS="$J_OBS; path lies inside the replaceable OSTree deployment"; return ;;
+		/var|/var/*|/sysroot|/sysroot/*) J_RES=PASS; return ;;
+		esac
+		case "$M_ROOT" in
+		*/ostree/deploy/*/var|*/ostree/deploy/*/var/*) J_RES=PASS; return ;;
+		esac
+		J_RES=UNKNOWN; J_OBS="$J_OBS; cannot establish independence from the deployment"
+	else
+		J_RES=UNKNOWN; J_OBS="$J_OBS; system not booted from OSTree, deployment independence not assessable"
+	fi
+}
+
+# ---------------------------------------------------------------------------
+# Results
+
+# Tools a check may depend on, as "tool:NAME" dependencies.
+HARNESS_TOOLS="awk sed grep head tail tr wc cut cat ls readlink dirname mkdir rm cp date df systemctl timeout"
+
+tool_ok() {
+	case "$1" in
+	timeout) [ -n "$TIMEOUT_STYLE" ] ;;
+	*) have "$1" ;;
+	esac
+}
+
+raw_of() { cat "$WORK/res/$1.raw" 2>/dev/null; }
+
+# record ID CAPABILITY SCOPE RAW_RESULT
+# Writes a completed row (post-MVP rule applied) to the work area and the
+# append-only progress file.
+record() {
+	_id=$1 _cap=$2 _scope=$3 _raw=$4
+	_final=$_raw
+	if [ "$_scope" = "post-MVP" ]; then
+		_final=PASS
+		NOTE="post-MVP: not required before MVP; inspection outcome would be $_raw.${NOTE:+ $NOTE}"
+		SUMMARY="not required before MVP (would be $_raw: $SUMMARY)"
+	fi
+	printf '%s' "$_raw" >"$WORK/res/$_id.raw"
+	{
+		printf 'ID=%s\nCAP=%s\nSCOPE=%s\nRESULT=%s\nRAW=%s\n' "$_id" "$_cap" "$_scope" "$_final" "$_raw"
+		printf 'SUMMARY=%s\n' "$SUMMARY"
+	} >"$WORK/res/$_id.meta"
+	{
+		printf 'Check: %s  [%s, %s]\n' "$_id" "$_cap" "$_scope"
+		printf 'Result: %s\n' "$_final"
+		[ -n "$BLOCKER" ] && printf 'Blocked by: %s\n' "$BLOCKER"
+		printf 'Expected: %s\n' "$EXP"
+		printf 'Observed: %s\n' "$OBS"
+		[ -n "$NOTE" ] && printf 'Explanation: %s\n' "$NOTE"
+		if [ -n "$EVID" ]; then
+			printf 'Evidence:\n'
+			printf '%s\n' "$EVID" | sed 's/^/  | /'
+		fi
+		printf '\n'
+	} >"$WORK/res/$_id.detail"
+	printf '%s\n' "$_id" >>"$ORDER"
+	cat "$WORK/res/$_id.detail" >>"$PARTIAL" 2>/dev/null
+	printf '%-16s %-16s %-9s %-8s %s\n' "$_id" "$_cap" "$_scope" "$_final" "$SUMMARY"
+}
+
+# run ID CAPABILITY SCOPE "DEPS" FUNCTION
+run() {
+	EXP="" OBS="" EVID="" NOTE="" SUMMARY="" BLOCKER="" RES=""
+	for _dep in $4; do
+		case "$_dep" in
+		tool:*)
+			_t=${_dep#tool:}
+			if ! tool_ok "$_t"; then
+				BLOCKER="ENV-04.$_t: $_t is not available"
+				break
+			fi ;;
+		*)
+			_dr=$(raw_of "$_dep")
+			if [ "$_dr" != "PASS" ]; then
+				BLOCKER="$_dep: result ${_dr:-not run}"
+				break
+			fi ;;
+		esac
+	done
+	if [ -n "$BLOCKER" ]; then
+		"$5" describe
+		OBS="Not evaluated"
+		SUMMARY="blocked by ${BLOCKER%%:*}"
+		record "$1" "$2" "$3" BLOCKED
+		return
+	fi
+	"$5" run
+	[ -n "$RES" ] || { RES=UNKNOWN; NOTE="check produced no result"; }
+	record "$1" "$2" "$3" "$RES"
+}
+
+# ---------------------------------------------------------------------------
+# ENV: harness and target identity
+
+c_env01() {
+	EXP="effective UID 0"
+	[ "$1" = describe ] && return
+	_uid=$(id -u 2>/dev/null)
+	OBS="effective UID ${_uid:-unknown}"
+	if [ "$_uid" = "0" ]; then RES=PASS; SUMMARY="running as root"
+	else RES=FAIL; SUMMARY="not running as root"; fi
+}
+
+c_env02() {
+	EXP="aarch64 or x86_64"
+	[ "$1" = describe ] && return
+	_m=$(uname -m 2>/dev/null)
+	OBS="uname -m: ${_m:-unknown}"
+	case "$_m" in
+	aarch64|arm64|x86_64|amd64) RES=PASS; SUMMARY="$_m" ;;
+	'') RES=UNKNOWN; SUMMARY="architecture not reported" ;;
+	*) RES=FAIL; SUMMARY="unsupported architecture $_m" ;;
+	esac
+}
+
+c_env03() {
+	EXP="declared image metadata identifies Yocto Wrynose"
+	[ "$1" = describe ] && return
+	_osr=$(p /etc/os-release)
+	[ -r "$_osr" ] || _osr=$(p /usr/lib/os-release)
+	_fields=""
+	if [ -r "$_osr" ]; then
+		_fields=$(grep -E '^(ID|NAME|VERSION_ID|VERSION_CODENAME|PRETTY_NAME|BUILD_ID|IMAGE_ID|IMAGE_VERSION)=' "$_osr" 2>/dev/null)
+	fi
+	_bi=$(p /etc/buildinfo)
+	_bilines=""
+	[ -r "$_bi" ] && _bilines=$(grep -iE 'wrynose|^meta|^DISTRO|^MACHINE' "$_bi" 2>/dev/null | head -n 20)
+	EVID=$(printf 'os-release:\n%s\nbuildinfo:\n%s' "${_fields:-<absent>}" "${_bilines:-<absent>}")
+	if printf '%s\n%s\n' "$_fields" "$_bilines" | grep -qi wrynose; then
+		RES=PASS; OBS="declared metadata names wrynose"; SUMMARY="declared Wrynose"
+	else
+		RES=UNKNOWN; OBS="no declared metadata names wrynose; release not inferred from kernel or branding"
+		SUMMARY="provenance not declared"
+	fi
+	NOTE="declared evidence only; the target cannot independently prove its build release"
+}
+
+c_env04() { # $2 = tool
+	EXP="$2 available to the harness"
+	[ "$1" = describe ] && return
+	if tool_ok "$2"; then
+		RES=PASS
+		case "$2" in
+		timeout) OBS="timeout style: $TIMEOUT_STYLE" ;;
+		*) OBS=$(command -v "$2") ;;
+		esac
+		SUMMARY="$2 available"
+	else
+		RES=FAIL; OBS="$2 not found or not usable"; SUMMARY="$2 missing; dependent checks blocked"
+	fi
+}
+
+c_env05() {
+	EXP="report destination writable"
+	[ "$1" = describe ] && return
+	_rd=$(dirname "$REPORT")
+	if printf '' >>"$PARTIAL" 2>/dev/null; then
+		_df=$(df -P "$_rd" 2>/dev/null | tail -n 1)
+		RES=PASS; OBS="$_rd writable"; EVID="df: $_df"; SUMMARY="report directory writable"
+	else
+		RES=FAIL; OBS="cannot write $PARTIAL"; SUMMARY="report not writable; console output only"
+	fi
+}
+
+# ---------------------------------------------------------------------------
+# OS: platform integration
+
+c_os01() {
+	EXP="SOTA client '$CLIENT' installed${CLIENT_IS_AKLITE:+, with runtime dependency lshw}"
+	[ "$1" = describe ] && return
+	if ! CLIENT_PATH=$(find_bin "$CLIENT"); then
+		RES=FAIL; OBS="$CLIENT not found in $BIN_DIRS"; SUMMARY="client executable absent"; return
+	fi
+	OBS="$CLIENT_PATH (selected by: $CLIENT_SRC)"
+	if [ -n "$CLIENT_IS_AKLITE" ]; then
+		if _l=$(find_bin lshw); then
+			OBS="$OBS; lshw at $_l"
+		else
+			RES=FAIL; OBS="$OBS; lshw not found"; SUMMARY="client present, lshw missing"; return
+		fi
+	fi
+	RES=PASS; SUMMARY="client executable found"
+}
+
+c_os02() {
+	EXP="client answers a harmless local version query"
+	[ "$1" = describe ] && return
+	if [ -z "$CLIENT_IS_AKLITE" ]; then
+		RES=UNKNOWN; OBS="no reviewed query for custom client $CLIENT"; SUMMARY="no approved query"; return
+	fi
+	q "$(p "$CLIENT_PATH")" --version
+	EVID="$ $CLIENT_PATH --version (exit $QRC)
+$QALL"
+	if [ "$QRC" -eq 0 ] && printf '%s' "$QRAW" | grep -q 'version'; then
+		RES=PASS; OBS=$(printf '%s' "$QRAW" | head -n 1 | redact); SUMMARY="version query succeeded"
+	else
+		RES=FAIL; OBS="version query exit $QRC"; SUMMARY="version query failed"
+	fi
+}
+
+c_os03() {
+	EXP="${CLIENT}.service loaded and enabled; ExecStart resolvable; boot-complete.target loadable; inactive allowed before registration"
+	[ "$1" = describe ] && return
+	_u="${CLIENT}.service"
+	unit_show -p LoadState -p UnitFileState -p ActiveState -p SubState -p ExecStart \
+		-p Requires -p After -p ConditionResult -p FragmentPath -p DropInPaths "$_u"
+	EVID="$SHOW"
+	_ls=$(prop LoadState); _uf=$(prop UnitFileState); _as=$(prop ActiveState)
+	_exec=$(prop ExecStart | sed -n 's/.*path=\([^ ;]*\).*/\1/p')
+	_req=$(prop Requires)
+	OBS="LoadState=${_ls:-?} UnitFileState=${_uf:-?} ActiveState=${_as:-?} ExecStart=${_exec:-?}"
+	if [ "$_ls" != "loaded" ]; then RES=FAIL; SUMMARY="$_u not loaded"; return; fi
+	case "$_uf" in
+	enabled|enabled-runtime|static|alias) ;;
+	*) RES=FAIL; SUMMARY="$_u not enabled"; return ;;
+	esac
+	if [ -z "$_exec" ] || [ ! -x "$(p "$_exec")" ]; then
+		RES=FAIL; SUMMARY="ExecStart executable not resolvable"; return
+	fi
+	case " $_req " in
+	*" boot-complete.target "*)
+		SHOW_U=$SHOW
+		unit_show -p LoadState boot-complete.target
+		_bls=$(prop LoadState); SHOW=$SHOW_U
+		OBS="$OBS; boot-complete.target LoadState=${_bls:-?}"
+		[ "$_bls" = "loaded" ] || { RES=FAIL; SUMMARY="boot-complete.target not loadable"; return; } ;;
+	esac
+	if [ "$_as" != "active" ]; then
+		NOTE="inactive is expected on an unregistered image (start is conditioned on enrollment state)"
+	fi
+	RES=PASS; SUMMARY="updater unit loaded and enabled"
+}
+
+c_os04() {
+	EXP="ostree CLI installed and answers --version"
+	[ "$1" = describe ] && return
+	if ! _o=$(find_bin ostree); then RES=FAIL; OBS="ostree not found"; SUMMARY="ostree absent"; return; fi
+	OSTREE_BIN=$_o
+	q "$(p "$_o")" --version
+	EVID="$ $_o --version (exit $QRC)
+$QALL"
+	if [ "$QRC" -eq 0 ]; then RES=PASS; OBS="$_o; $(printf '%s' "$QRAW" | grep -m1 -i version | redact)"; SUMMARY="ostree present"
+	else RES=FAIL; OBS="$_o --version exit $QRC"; SUMMARY="ostree query failed"; fi
+}
+
+c_os05() {
+	EXP="booted from OSTree (/run/ostree-booted) with a booted deployment in local status"
+	[ "$1" = describe ] && return
+	if ! ostree_booted; then RES=FAIL; OBS="/run/ostree-booted absent"; SUMMARY="not booted from OSTree"; return; fi
+	q "$(p "$OSTREE_BIN")" admin status
+	EVID="$ $OSTREE_BIN admin status (exit $QRC)
+$QALL"
+	_booted=$(printf '%s\n' "$QRAW" | grep -m1 '^\* ')
+	if [ "$QRC" -eq 0 ] && [ -n "$_booted" ]; then
+		RES=PASS; OBS="booted deployment: ${_booted#\* }"; SUMMARY="booted OSTree deployment found"
+	else
+		RES=FAIL; OBS="no booted deployment in status (exit $QRC)"; SUMMARY="no booted deployment"
+	fi
+}
+
+c_os06() {
+	EXP="file-backed update state $STATE_DIR on persistent writable storage outside the deployment; created by tmpfiles"
+	[ "$1" = describe ] && return
+	judge_persist "$STATE_DIR"
+	_tf=""
+	for _f in /usr/lib/tmpfiles.d/aktualizr-lite.conf /etc/tmpfiles.d/aktualizr-lite.conf; do
+		[ -r "$(p "$_f")" ] && _tf="$_tf$_f: $(grep -E "^[dDvq][[:space:]]+$STATE_DIR([[:space:]]|$)" "$(p "$_f")" 2>/dev/null)
+"
+	done
+	_mode=""
+	[ -d "$(p "$STATE_DIR")" ] && _mode=$(ls -ld "$(p "$STATE_DIR")" 2>/dev/null | awk '{print $1, $3, $4}')
+	OBS="$J_OBS; state dir: ${_mode:-not yet created}"
+	EVID="tmpfiles:
+${_tf:-<no tmpfiles entry found>}"
+	NOTE="declared persistence and writeability only; survival across update or reboot is not proven"
+	if [ ! -d "$(p "$STATE_DIR")" ] && ! printf '%s' "$_tf" | grep -q "$STATE_DIR"; then
+		RES=FAIL; SUMMARY="state dir absent and no creation mechanism"; return
+	fi
+	RES=$J_RES
+	case "$RES" in
+	PASS) SUMMARY="state storage persistent and writable" ;;
+	FAIL) SUMMARY="state storage not persistent or not writable" ;;
+	*) SUMMARY="state persistence ambiguous" ;;
+	esac
+}
+
+c_os07() {
+	EXP="image-level client configuration installed (hardware ID fragment); enrollment-generated files not required"
+	[ "$1" = describe ] && return
+	if [ -z "$CLIENT_IS_AKLITE" ]; then
+		RES=UNKNOWN; OBS="configuration contract of custom client $CLIENT is not defined"; SUMMARY="custom client config unknown"; return
+	fi
+	_frags="" _hwid=""
+	for _d in /usr/lib/sota/conf.d /usr/lib64/sota/conf.d /etc/sota/conf.d /var/sota/sota.toml; do
+		_pd=$(p "$_d")
+		if [ -d "$_pd" ]; then
+			for _f in "$_pd"/*.toml; do
+				[ -f "$_f" ] || continue
+				_frags="$_frags ${_f#"$R"}"
+				_v=$(sed -n 's/^[[:space:]]*primary_ecu_hardware_id[[:space:]]*=[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}.*/\1/p' "$_f" | head -n 1)
+				[ -n "$_v" ] && [ -z "$_hwid" ] && _hwid="$_v (from ${_f#"$R"})"
+			done
+		fi
+	done
+	_reg="absent"; [ -e "$(p "$STATE_DIR/sota.toml")" ] && _reg="present"
+	OBS="fragments:${_frags:- none}; hardware ID: ${_hwid:-not set}; enrollment sota.toml: $_reg"
+	NOTE="only allowlisted fields are read; a missing enrollment-generated sota.toml is expected before registration"
+	if [ -n "$_hwid" ]; then RES=PASS; SUMMARY="hardware ID configured"
+	else RES=FAIL; SUMMARY="no hardware ID fragment"; fi
+}
+
+c_os08() {
+	EXP="fio-device-register installed; advanced help lists update-server endpoint options (--device-api, --oauth-api)"
+	[ "$1" = describe ] && return
+	if ! _r=$(find_bin fio-device-register); then RES=FAIL; OBS="fio-device-register not found"; SUMMARY="registration tool absent"; return; fi
+	q "$(p "$_r")" --help-advanced
+	EVID="$ $_r --help-advanced (exit $QRC; help exits non-zero by design)
+$(printf '%s\n' "$QRAW" | grep -E 'device-api|oauth-api|Git Commit' | redact)"
+	if printf '%s' "$QRAW" | grep -q -- '--device-api' && printf '%s' "$QRAW" | grep -q -- '--oauth-api'; then
+		RES=PASS; OBS="$_r; endpoint options available"; SUMMARY="registration entrypoint available"
+	else
+		RES=FAIL; OBS="$_r; endpoint options not listed (exit $QRC)"; SUMMARY="endpoint options missing"
+	fi
+	NOTE="no enrollment performed; deployment-specific URLs are not required before registration"
+}
+
+c_os09() {
+	EXP="fioconfig with fioconfig.service/.path/-extract.service; handlers aktualizr-toml-update factory-config-vpn renew-client-cert; actions diag reboot"
+	[ "$1" = describe ] && return
+	_miss=""
+	if FIOCONFIG_BIN=$(find_bin fioconfig); then :; else _miss="$_miss fioconfig"; FIOCONFIG_BIN=""; fi
+	for _u in fioconfig.service fioconfig.path fioconfig-extract.service; do
+		unit_show -p LoadState "$_u"
+		[ "$(prop LoadState)" = "loaded" ] || _miss="$_miss $_u"
+	done
+	for _h in aktualizr-toml-update factory-config-vpn renew-client-cert; do
+		[ -x "$(p "/usr/share/fioconfig/handlers/$_h")" ] || _miss="$_miss handler:$_h"
+	done
+	for _a in diag reboot; do
+		[ -x "$(p "/usr/share/fioconfig/actions/$_a")" ] || _miss="$_miss action:$_a"
+	done
+	_present=$(ls "$(p /usr/share/fioconfig/handlers)" 2>/dev/null | tr '\n' ' ')
+	EVID="handlers present: ${_present:-none}"
+	if [ -n "$FIOCONFIG_BIN" ]; then
+		q "$(p "$FIOCONFIG_BIN")" version
+		EVID="$EVID
+$ $FIOCONFIG_BIN version (exit $QRC)
+$QALL"
+	fi
+	NOTE="nothing executed except 'fioconfig version'; fio-diag is never invoked"
+	if [ -z "$_miss" ]; then RES=PASS; OBS="all required units, handlers and actions present"; SUMMARY="fioconfig complete"
+	else RES=FAIL; OBS="missing:$_miss"; SUMMARY="fioconfig incomplete:$_miss"; fi
+}
+
+c_os10() {
+	EXP="state and boot paths writable with free space (quantities reported; no threshold defined)"
+	[ "$1" = describe ] && return
+	_bad="" _ev=""
+	for _path in "$STATE_DIR" /boot /sysroot; do
+		_ep=$(existing_parent "$_path")
+		[ "$_path" != "$STATE_DIR" ] && [ "$_ep" != "$_path" ] && continue
+		mount_for "$_ep" || continue
+		_df=$(df -P "$(p "$_ep")" 2>/dev/null | tail -n 1 | awk '{print "avail_kB=" $4, "used=" $5}')
+		_dfi=$(df -Pi "$(p "$_ep")" 2>/dev/null | tail -n 1 | awk '{print "inodes_free=" $4}')
+		_ev="$_ev$_path -> $M_POINT ($M_FSTYPE, $M_OPTS) $_df $_dfi
+"
+		case "$_path" in
+		/boot) ;;  # read-only /boot is legitimate on some layouts; reported only
+		*) case ",$M_OPTS," in *,ro,*) _bad="$_bad $_path:read-only" ;; esac ;;
+		esac
+		printf '%s' "$_df" | grep -q 'avail_kB=0 ' && _bad="$_bad $_path:no-space"
+	done
+	EVID=$_ev
+	if [ -z "$_ev" ]; then RES=UNKNOWN; OBS="no mount information"; SUMMARY="storage not assessable"; return; fi
+	if [ -z "$_bad" ]; then RES=PASS; OBS="writable with free space"; SUMMARY="storage usable"
+	else RES=FAIL; OBS="problems:$_bad"; SUMMARY="storage problem:$_bad"; fi
+}
+
+c_os11() {
+	EXP="nmcli installed; connman absent (NetworkManager is the supported network stack)"
+	[ "$1" = describe ] && return
+	_n=$(find_bin nmcli) || _n=""
+	_c=""
+	find_bin connmand >/dev/null && _c="connmand binary"
+	unit_show -p LoadState connman.service
+	[ "$(prop LoadState)" = "loaded" ] && _c="${_c:+$_c, }connman.service"
+	if [ -n "$_n" ]; then
+		q "$(p "$_n")" --version
+		EVID="$ $_n --version (exit $QRC)
+$QALL"
+	fi
+	OBS="nmcli: ${_n:-absent}; connman: ${_c:-absent}"
+	if [ -n "$_n" ] && [ -z "$_c" ]; then RES=PASS; SUMMARY="NetworkManager CLI present, no connman"; return; fi
+	RES=FAIL
+	if [ -z "$_n" ] && [ -n "$_c" ]; then SUMMARY="nmcli missing; connman present"
+	elif [ -z "$_n" ]; then SUMMARY="nmcli missing"
+	else SUMMARY="connman present"; fi
+}
+
+c_os12() {
+	EXP="fioconfig built with the vpn build tag (fioconfig VPN support)"
+	[ "$1" = describe ] && return
+	_tags=$(tr -c '\040-\176' '\n' <"$(p "$FIOCONFIG_BIN")" 2>/dev/null | grep -E '^-tags=' | head -n 1)
+	EVID="embedded Go build setting: ${_tags:-<none found>}"
+	NOTE="read from Go build settings embedded in the binary; the binary is not executed"
+	if [ -z "$_tags" ]; then
+		# Go always records -compiler; -ldflags is omitted under -trimpath.
+		if tr -c '\040-\176' '\n' <"$(p "$FIOCONFIG_BIN")" 2>/dev/null | grep -q '^-compiler='; then
+			RES=FAIL; OBS="build settings present without a -tags entry"; SUMMARY="built without vpn tag"
+		else
+			RES=UNKNOWN; OBS="no embedded build settings found"; SUMMARY="build tags not recoverable"
+		fi
+		return
+	fi
+	case ",${_tags#-tags=}," in
+	*,vpn,*) RES=PASS; OBS="$_tags"; SUMMARY="built with vpn tag" ;;
+	*) RES=FAIL; OBS="$_tags"; SUMMARY="built without vpn tag" ;;
+	esac
+}
+
+# ---------------------------------------------------------------------------
+# BOOT: UEFI and boot integration
+
+c_boot01() {
+	EXP="system booted through UEFI (/sys/firmware/efi present)"
+	[ "$1" = describe ] && return
+	if [ -d "$(p /sys/firmware/efi)" ]; then RES=PASS; OBS="/sys/firmware/efi present"; SUMMARY="UEFI boot"
+	else RES=FAIL; OBS="/sys/firmware/efi absent"; SUMMARY="not booted through UEFI"; fi
+}
+
+c_boot02() {
+	EXP="efivarfs mounted with access for an EFI-variable state integration"
+	[ "$1" = describe ] && return
+	if mount_for /sys/firmware/efi/efivars && [ "$M_FSTYPE" = "efivarfs" ]; then
+		OBS="efivarfs at $M_POINT opts=$M_OPTS"
+		case ",$M_OPTS," in *,ro,*) RES=FAIL; SUMMARY="efivarfs read-only" ;; *) RES=PASS; SUMMARY="efivarfs available" ;; esac
+	else
+		RES=FAIL; OBS="efivarfs not mounted"; SUMMARY="efivarfs not mounted"
+	fi
+}
+
+c_boot03() {
+	EXP="BSP EFI-variable OTA-state integration components and mappings"
+	[ "$1" = describe ] && return
+	RES=UNKNOWN; OBS="no BSP EFI-variable state contract defined"; SUMMARY="criterion not yet defined"
+}
+
+c_boot04() {
+	EXP="criterion not yet defined (MVP boot-health mechanism owned by the system scope)"
+	[ "$1" = describe ] && return
+	unit_show -p LoadState -p ActiveState -p Requires -p Wants -p After boot-complete.target
+	EVID="$SHOW"
+	OBS="boot-complete.target LoadState=$(prop LoadState) ActiveState=$(prop ActiveState)"
+	RES=UNKNOWN; SUMMARY="criterion not yet defined"
+	NOTE="target existence alone does not prove a boot-health policy"
+}
+
+c_boot05() {
+	EXP="EFI system partition discoverable with a boot binary (BSP-specific expectations provisional)"
+	[ "$1" = describe ] && return
+	_mi=$(p /proc/self/mountinfo)
+	_esp=$(awk '{ n=0; for (i=7;i<=NF;i++) if ($i=="-") { n=i; break } if (n && $(n+1)=="vfat") print $5 }' "$_mi" 2>/dev/null | head -n 5)
+	_found=""
+	for _m in $_esp; do
+		for _b in "$_m"/EFI/BOOT/BOOT*.EFI "$_m"/EFI/BOOT/boot*.efi; do
+			[ -f "$(p "$_b")" ] 2>/dev/null && _found="$_found $_b"
+		done 2>/dev/null
+	done
+	# Glob above runs on unprefixed paths; repeat under the test root.
+	if [ -z "$_found" ] && [ -n "$R" ]; then
+		for _m in $_esp; do
+			for _b in "$R$_m"/EFI/BOOT/*.[Ee][Ff][Ii]; do [ -f "$_b" ] && _found="$_found ${_b#"$R"}"; done
+		done
+	fi
+	_ld=""; [ -e "$(p /boot/loader)" ] && _ld="/boot/loader present"
+	EVID="vfat mounts: ${_esp:-none}; ${_ld:-/boot/loader absent}"
+	if [ -n "$_found" ]; then RES=PASS; OBS="boot binary:$_found"; SUMMARY="ESP and boot binary found"
+	elif [ -z "$_esp" ]; then RES=UNKNOWN; OBS="no ESP mounted; not mounted by the suite"; SUMMARY="ESP not mounted"
+	else RES=FAIL; OBS="ESP mounted at $_esp without EFI/BOOT binary"; SUMMARY="no EFI boot binary"; fi
+}
+
+c_boot06() {
+	EXP="criterion not yet defined (boot-health and watchdog criteria)"
+	[ "$1" = describe ] && return
+	_ev=""
+	for _w in "$(p /sys/class/watchdog)"/watchdog*; do
+		[ -d "$_w" ] || continue
+		_ev="$_ev${_w#"$R"}: identity=$(cat "$_w/identity" 2>/dev/null) timeout=$(cat "$_w/timeout" 2>/dev/null) state=$(cat "$_w/state" 2>/dev/null)
+"
+	done
+	unit_show -p RuntimeWatchdogUSec -p RebootWatchdogUSec
+	EVID="${_ev:-no watchdog devices in sysfs}
+systemd: $(printf '%s' "$SHOW" | tr '\n' ' ')"
+	OBS="watchdog metadata recorded from sysfs; /dev/watchdog not opened"
+	RES=UNKNOWN; SUMMARY="criterion not yet defined"
+}
+
+# ---------------------------------------------------------------------------
+# APP: Full Update container integration
+
+docker_client() { DOCKER_HOST=$NO_DAEMON DOCKER_CONTEXT="" q "$@"; }
+
+c_app01() {
+	EXP="docker, dockerd and the Compose plugin installed and answer client-only version queries"
+	[ "$1" = describe ] && return
+	_miss="" _ev=""
+	if DOCKER_BIN=$(find_bin docker); then
+		docker_client "$(p "$DOCKER_BIN")" --version; _ev="$_ev$ docker --version (exit $QRC): $QALL
+"; [ "$QRC" -eq 0 ] || _miss="$_miss docker(query)"
+	else DOCKER_BIN=""; _miss="$_miss docker"; fi
+	if _dd=$(find_bin dockerd); then
+		q "$(p "$_dd")" --version; _ev="$_ev$ dockerd --version (exit $QRC): $QALL
+"; [ "$QRC" -eq 0 ] || _miss="$_miss dockerd(query)"
+	else _miss="$_miss dockerd"; fi
+	_cp=""
+	for _c in /usr/libexec/docker/cli-plugins/docker-compose /usr/lib/docker/cli-plugins/docker-compose \
+		/usr/local/lib/docker/cli-plugins/docker-compose /usr/bin/docker-compose; do
+		[ -x "$(p "$_c")" ] && { _cp=$_c; break; }
+	done
+	if [ -n "$_cp" ]; then
+		docker_client "$(p "$_cp")" version; _ev="$_ev$ $_cp version (exit $QRC): $QALL
+"; [ "$QRC" -eq 0 ] || _miss="$_miss compose(query)"
+	else _miss="$_miss compose-plugin"; fi
+	EVID=$_ev
+	NOTE="client queries run with DOCKER_HOST pointed at a nonexistent socket so they cannot start dockerd"
+	if [ -z "$_miss" ]; then RES=PASS; OBS="docker, dockerd, compose plugin ($_cp)"; SUMMARY="Docker and Compose installed"
+	else RES=FAIL; OBS="missing or failing:$_miss"; SUMMARY="Docker incomplete:$_miss"; fi
+}
+
+c_app02() {
+	EXP="docker.service enabled and active; local socket answers a server version query"
+	[ "$1" = describe ] && return
+	unit_show -p UnitFileState -p ActiveState -p SubState docker.service
+	_uf=$(prop UnitFileState); _as=$(prop ActiveState)
+	_svc=$SHOW
+	unit_show -p UnitFileState -p ActiveState docker.socket
+	EVID="docker.service: $(printf '%s' "$_svc" | tr '\n' ' ')
+docker.socket: $(printf '%s' "$SHOW" | tr '\n' ' ')"
+	OBS="docker.service UnitFileState=${_uf:-?} ActiveState=${_as:-?}"
+	case "$_uf" in enabled|enabled-runtime) ;; *) RES=FAIL; SUMMARY="docker.service not enabled"; return ;; esac
+	if [ "$_as" != "active" ]; then
+		RES=FAIL; SUMMARY="docker.service enabled but not running"
+		NOTE="socket not queried: a request would socket-activate dockerd"
+		return
+	fi
+	DOCKER_HOST=$DOCKER_SOCK DOCKER_CONTEXT="" q "$(p "$DOCKER_BIN")" version --format '{{.Server.Version}}'
+	EVID="$EVID
+$ docker version --format {{.Server.Version}} (exit $QRC): $QALL"
+	if [ "$QRC" -eq 0 ] && [ -n "$QRAW" ]; then RES=PASS; OBS="$OBS; server $QOUT"; SUMMARY="dockerd running"
+	else RES=FAIL; OBS="$OBS; server query failed (exit $QRC)"; SUMMARY="daemon not answering"; fi
+}
+
+c_app03() {
+	EXP="effective storage driver overlay2 with containerd-snapshotter disabled (layer default)"
+	_static=""
+	for _f in /etc/docker/daemon.json /usr/lib/docker/daemon.json; do
+		if [ -r "$(p "$_f")" ]; then
+			_sd=$(grep -o '"storage-driver"[[:space:]]*:[[:space:]]*"[^"]*"' "$(p "$_f")" 2>/dev/null | sed 's/.*"\([^"]*\)"$/\1/')
+			_cs=$(grep -o '"containerd-snapshotter"[[:space:]]*:[[:space:]]*[a-z]*' "$(p "$_f")" 2>/dev/null | sed 's/.*:[[:space:]]*//')
+			_static="$_static$_f: storage-driver=${_sd:-unset} containerd-snapshotter=${_cs:-unset}
+"
+		else
+			_static="$_static$_f: absent
+"
+		fi
+	done
+	EVID="static configuration (precedence /etc over /usr/lib; text extraction, not a JSON parser):
+$_static"
+	[ "$1" = describe ] && return
+	DOCKER_HOST=$DOCKER_SOCK DOCKER_CONTEXT="" q "$(p "$DOCKER_BIN")" info --format '{{.Driver}}|{{.DockerRootDir}}|{{.DriverStatus}}'
+	EVID="$EVID
+$ docker info --format ... (exit $QRC): $QALL"
+	_drv=$(printf '%s' "$QRAW" | head -n 1 | cut -d'|' -f1)
+	OBS="effective driver: ${_drv:-unknown}"
+	if [ "$QRC" -ne 0 ]; then RES=UNKNOWN; SUMMARY="effective configuration not readable"
+	elif [ "$_drv" = "overlay2" ]; then RES=PASS; SUMMARY="overlay2, classic image store"
+	else RES=FAIL; SUMMARY="storage driver $_drv"; fi
+}
+
+c_app04() {
+	EXP="composectl installed; aklite-apps resolves to composectl; version query succeeds"
+	[ "$1" = describe ] && return
+	if ! COMPOSECTL_BIN=$(find_bin composectl); then RES=FAIL; OBS="composectl not found"; SUMMARY="composectl absent"; return; fi
+	_ak=$(find_bin aklite-apps) || _ak=""
+	_tgt=""; [ -n "$_ak" ] && _tgt=$(readlink "$(p "$_ak")" 2>/dev/null)
+	docker_client "$(p "$COMPOSECTL_BIN")" version
+	EVID="$ composectl version (exit $QRC): $QALL
+aklite-apps: ${_ak:-absent} -> ${_tgt:-not a symlink}"
+	OBS="$COMPOSECTL_BIN; aklite-apps ${_ak:-absent}"
+	if [ -z "$_ak" ]; then RES=FAIL; SUMMARY="aklite-apps entrypoint absent"; return; fi
+	case "$_tgt" in composectl|*/composectl) ;; *) RES=FAIL; SUMMARY="aklite-apps does not resolve to composectl"; return ;; esac
+	if [ "$QRC" -eq 0 ]; then RES=PASS; SUMMARY="composectl and aklite-apps present"
+	else RES=FAIL; SUMMARY="composectl version query failed"; fi
+}
+
+c_app05() {
+	EXP="compose-app roots on persistent writable storage"
+	[ "$1" = describe ] && return
+	docker_client "$(p "$COMPOSECTL_BIN")" --help
+	_store=$(printf '%s\n' "$QRAW" | sed -n 's/.*--store.*(default "\([^"]*\)").*/\1/p' | head -n 1)
+	_compose=$(printf '%s\n' "$QRAW" | sed -n 's/.*--compose.*(default "\([^"]*\)").*/\1/p' | head -n 1)
+	_store=${_store:-/var/sota/reset-apps}; _compose=${_compose:-/var/sota/compose-apps}
+	_res=PASS _obs=""
+	for _root in "$_compose" "$_store"; do
+		judge_persist "$_root"
+		_obs="${_obs}[$J_RES] $J_OBS
+"
+		case "$J_RES" in FAIL) _res=FAIL ;; UNKNOWN) [ "$_res" = PASS ] && _res=UNKNOWN ;; esac
+	done
+	EVID="roots from composectl --help defaults: compose=$_compose store=$_store"
+	OBS=$_obs
+	RES=$_res
+	case "$RES" in PASS) SUMMARY="app roots persistent" ;; FAIL) SUMMARY="app roots not persistent" ;; *) SUMMARY="app root persistence ambiguous" ;; esac
+	NOTE="preloaded content is not required"
+}
+
+c_app06() {
+	EXP="criterion not yet defined (early application startup provider)"
+	[ "$1" = describe ] && return
+	_c=$(systemctl list-unit-files --no-legend 2>/dev/null | grep -iE 'compose-apps-early-start|early-start' | head -n 5)
+	EVID="candidate units: ${_c:-none}"
+	OBS="provider not defined; candidates recorded only"
+	RES=UNKNOWN; SUMMARY="criterion not yet defined"
+}
+
+c_app08() {
+	EXP="criterion not yet defined (container-storage recovery provider)"
+	[ "$1" = describe ] && return
+	_c=$(systemctl list-unit-files --no-legend 2>/dev/null | grep -iE 'docker-fsck|fio-docker' | head -n 5)
+	EVID="candidate units: ${_c:-none}"
+	OBS="provider not defined; candidates recorded only"
+	RES=UNKNOWN; SUMMARY="criterion not yet defined"
+}
+
+# ---------------------------------------------------------------------------
+# FW: firmware-update readiness (post-MVP)
+
+c_fw01() {
+	EXP="fwupd components installed (not executed: fwupdmgr can D-Bus-activate fwupd)"
+	[ "$1" = describe ] && return
+	_f=""
+	for _b in fwupdmgr fwupdtool; do find_bin "$_b" >/dev/null && _f="$_f $_b"; done
+	for _d in /usr/libexec/fwupd/fwupd /usr/lib/fwupd/fwupd; do [ -x "$(p "$_d")" ] && _f="$_f $_d"; done
+	if [ -n "$_f" ]; then RES=PASS; OBS="found:$_f"; SUMMARY="fwupd present"
+	else RES=FAIL; OBS="fwupd components not found"; SUMMARY="fwupd absent"; fi
+}
+
+c_fw02() {
+	EXP="firmware exposes ESRT entries"
+	[ "$1" = describe ] && return
+	_n=$(ls "$(p /sys/firmware/efi/esrt/entries)" 2>/dev/null | wc -l | tr -d ' ')
+	OBS="ESRT entries: ${_n:-0}"
+	if [ "${_n:-0}" -gt 0 ]; then RES=PASS; SUMMARY="ESRT present"
+	else RES=UNKNOWN; SUMMARY="no ESRT; capability criterion not defined"; fi
+}
+
+c_fw03() {
+	EXP="capsule staging integration (fwupd EFI binary) present"
+	[ "$1" = describe ] && return
+	_e=""
+	for _f in "$(p /usr/libexec/fwupd/efi)"/fwupd*.efi "$(p /usr/lib/fwupd/efi)"/fwupd*.efi; do [ -f "$_f" ] && _e="$_e ${_f#"$R"}"; done
+	if [ -n "$_e" ]; then RES=PASS; OBS="$_e"; SUMMARY="capsule EFI helper present"
+	else RES=UNKNOWN; OBS="no fwupd EFI helper found"; SUMMARY="staging contract not defined"; fi
+}
+
+c_fw04() {
+	EXP="BSP metadata documents inactive-slot and fallback arrangement"
+	[ "$1" = describe ] && return
+	RES=UNKNOWN; OBS="no inspectable BSP fallback contract"; SUMMARY="criterion not yet defined"
+}
+
+# ---------------------------------------------------------------------------
+# Report
+
+INTERRUPTED=""
+
+write_report() {
+	_end=$(now_utc)
+	_end_s=$(date +%s 2>/dev/null || echo 0)
+	_model=$(tr -d '\0' <"$(p /sys/firmware/devicetree/base/model)" 2>/dev/null || cat "$(p /sys/class/dmi/id/product_name)" 2>/dev/null)
+	_osid=$(sed -n 's/^PRETTY_NAME=//p' "$(p /etc/os-release)" 2>/dev/null | tr -d '"')
+	{
+		printf 'meta-foundries readiness report\n'
+		[ -n "$INTERRUPTED" ] && printf '*** INCOMPLETE: run interrupted; unlisted checks were not executed and did not pass ***\n'
+		printf 'Suite: %s  Check definitions: %s\n' "$SUITE_VERSION" "$DEFS_REVISION"
+		printf 'Started: %s  Ended: %s  Duration: %ss\n' "$START" "$_end" "$((_end_s - START_S))"
+		if [ "$PROFILE" = full ]; then printf 'Profile: Full Update%s\n' "$PROFILE_NOTE"
+		else printf 'Profile: OS Update. Container checks are outside this profile and omitted.\n'; fi
+		[ -n "$CONTAINER_NOTE" ] && printf '%s\n' "$CONTAINER_NOTE"
+		printf 'Host: %s  Model: %s\n' "$HOST" "${_model:-unknown}"
+		printf 'Architecture: %s  Kernel: %s\n' "$(uname -m 2>/dev/null)" "$(uname -r 2>/dev/null)"
+		printf 'Image: %s\n' "${_osid:-unknown}"
+		printf 'Overrides: client=%s (%s) state-dir=%s (%s) timeout=%ss\n' "$CLIENT" "$CLIENT_SRC" "$STATE_DIR" "$STATE_SRC" "$QTIMEOUT"
+		printf '\nReadiness inspection only. Updates, registration, firmware application and\n'
+		printf 'recovery were not exercised. A PASS establishes only the stated condition.\n'
+		printf 'Testing can leave the device in an unknown state; restore a known-good image\n'
+		printf 'afterward if you need one.\n\n'
+		printf '%-16s %-16s %-9s %-8s %s\n' ID CAPABILITY SCOPE RESULT SUMMARY
+		while read -r _id; do
+			_m="$WORK/res/$_id.meta"
+			printf '%-16s %-16s %-9s %-8s %s\n' "$_id" "$(sed -n 's/^CAP=//p' "$_m")" \
+				"$(sed -n 's/^SCOPE=//p' "$_m")" "$(sed -n 's/^RESULT=//p' "$_m")" "$(sed -n 's/^SUMMARY=//p' "$_m")"
+		done <"$ORDER"
+		printf '\nCounts:'
+		for _s in PASS FAIL BLOCKED UNKNOWN; do
+			printf ' %s=%s' "$_s" "$(cat "$WORK"/res/*.meta 2>/dev/null | grep -c "^RESULT=$_s\$")"
+		done
+		printf '\n\n'
+		while read -r _id; do cat "$WORK/res/$_id.detail"; done <"$ORDER"
+	} >"$WORK/report.txt"
+	if cp "$WORK/report.txt" "$REPORT" 2>/dev/null; then
+		rm -f "$PARTIAL"
+		printf '\nReport: %s\n' "$REPORT"
+	else
+		printf '\nReport could not be written to %s; full report follows.\n\n' "$REPORT"
+		cat "$WORK/report.txt"
+	fi
+}
+
+cleanup() { rm -rf "$WORK"; }
+
+on_signal() {
+	INTERRUPTED=1
+	trap - INT TERM HUP
+	write_report
+	cleanup
+	exit 130
+}
+trap on_signal INT TERM HUP
+
+# ---------------------------------------------------------------------------
+# Main
+
+CLIENT_IS_AKLITE=""; [ "$CLIENT" = "aktualizr-lite" ] && CLIENT_IS_AKLITE=1
+CLIENT_PATH="" OSTREE_BIN="" FIOCONFIG_BIN="" DOCKER_BIN="" COMPOSECTL_BIN=""
+PROFILE_NOTE=""; [ "$PROFILE" = full ] && PROFILE_NOTE=" (default)"
+
+CONTAINER_NOTE=""
+if [ "$PROFILE" = os ]; then
+	_seen=""
+	for _b in docker dockerd composectl; do find_bin "$_b" >/dev/null && _seen="$_seen $_b"; done
+	[ -n "$_seen" ] && CONTAINER_NOTE="Container components present:$_seen; not needed for OS Update; not evaluated."
+fi
+
+printf '' >"$PARTIAL" 2>/dev/null
+printf 'fio-readiness %s, profile %s\n\n' "$SUITE_VERSION" "$PROFILE"
+printf '%-16s %-16s %-9s %-8s %s\n' ID CAPABILITY SCOPE RESULT SUMMARY
+
+run ENV-01 Harness MVP "" c_env01
+run ENV-02 Harness MVP "" c_env02
+run ENV-03 Provenance MVP "tool:grep" c_env03
+for _t in $HARNESS_TOOLS; do
+	c_env04_t() { c_env04 "$1" "$_t"; }
+	run "ENV-04.$_t" Harness MVP "" c_env04_t
+done
+run ENV-05 Harness MVP "tool:df" c_env05
+
+run OS-01 "OS update" MVP "" c_os01
+run OS-02 "OS update" MVP "OS-01 tool:timeout" c_os02
+run OS-03 "OS update" MVP "OS-01 tool:systemctl" c_os03
+run OS-04 "OS update" MVP "tool:timeout" c_os04
+run OS-05 "OS update" MVP "OS-04" c_os05
+run OS-06 "Update state" MVP "ENV-01 tool:awk" c_os06
+run OS-07 "Configuration" MVP "ENV-01 OS-01" c_os07
+run OS-08 Registration MVP "tool:timeout" c_os08
+run OS-09 "Device config" MVP "tool:systemctl tool:timeout" c_os09
+run OS-10 Storage MVP "ENV-01 tool:df tool:awk" c_os10
+run OS-11 Networking MVP "tool:systemctl" c_os11
+if [ -n "$FIOCONFIG_BIN" ]; then
+	run OS-12 "Device config" MVP "tool:tr" c_os12
+else
+	BLOCKER="OS-09: fioconfig executable absent"; EXP="fioconfig built with the vpn build tag (fioconfig VPN support)"
+	OBS="Not evaluated"; EVID="" NOTE="" SUMMARY="blocked by OS-09"
+	record OS-12 "Device config" MVP BLOCKED
+fi
+
+run BOOT-01 "Boot" MVP "" c_boot01
+run BOOT-02 "Boot" post-MVP "BOOT-01 tool:awk" c_boot02
+run BOOT-03 "Boot" post-MVP "BOOT-02" c_boot03
+run BOOT-04 "Boot health" MVP "OS-03" c_boot04
+run BOOT-05 "Boot" MVP "tool:awk" c_boot05
+run BOOT-06 "Boot health" MVP "" c_boot06
+
+if [ "$PROFILE" = full ]; then
+	run APP-01 Applications MVP "tool:timeout" c_app01
+	run APP-02 Applications MVP "APP-01 tool:systemctl" c_app02
+	run APP-03 Applications MVP "APP-02" c_app03
+	run APP-04 Applications MVP "tool:timeout" c_app04
+	run APP-05 Applications MVP "APP-04 ENV-01 tool:awk" c_app05
+	run APP-06 Applications MVP "tool:systemctl" c_app06
+	run APP-08 Applications MVP "tool:systemctl" c_app08
+fi
+
+run FW-01 "Firmware update" post-MVP "" c_fw01
+run FW-02 "Firmware update" post-MVP "BOOT-01" c_fw02
+run FW-03 "Firmware update" post-MVP "BOOT-05" c_fw03
+run FW-04 "Firmware update" post-MVP "" c_fw04
+
+trap - INT TERM HUP
+write_report
+cleanup
+exit 0
