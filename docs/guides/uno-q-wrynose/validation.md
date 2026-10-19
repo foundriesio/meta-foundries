@@ -4,7 +4,7 @@ description: Source revisions, authoring checks, and pending execution evidence 
 type: page
 doc-category: record
 authors: David Griego, Codex:GPT-6
-last-edited: 2026-10-13
+last-edited: 2026-10-19
 license: MIT
 access: public
 references:
@@ -45,6 +45,7 @@ The meta-foundries pin, registration contract, kas include layout, and optional 
 A walkthrough of that revision ran on hardware on October 11, and the layer set changed on October 12, 2026.
 A walkthrough of revision `f97458c` completed every exercise on hardware on October 13, 2026.
 The update server then moved from release v1.0-rc1 to a source build of `main`.
+Run 3 verified that source build at `e30762e` with guide revision `c71f6af` on 2026-10-13; its record was added on 2026-10-19.
 This record describes the guide's evidence and outstanding execution checks.
 
 ## Source Baseline
@@ -57,7 +58,7 @@ This record describes the guide's evidence and outstanding execution checks.
 | [`meta-qcom-arduino`](https://github.com/qualcomm-linux/meta-qcom-arduino/tree/a65e94a51f8233607b683787735225a10d80fe65) | `main`, `a65e94a51f8233607b683787735225a10d80fe65` | UNO Q machine and the `linux-arduino` 7.0 kernel |
 | [OpenEmbedded Core](https://github.com/openembedded/openembedded-core/tree/db81c1a42a0f552d9a8ec124f004ae2063d58c33) | `master`, `db81c1a42a0f552d9a8ec124f004ae2063d58c33` | Core layer; the remaining layer pins are listed on [the build page](build.md#what-is-pinned) |
 | [meta-updater](https://github.com/uptane/meta-updater/tree/3f79539a8e1250c46d824b3af2415b9add945161) | `master`, `3f79539a8e1250c46d824b3af2415b9add945161` | OTA integration layer |
-| [Foundries Update Server](https://github.com/foundriesio/update-server/tree/e30762e42e3cd45f730be51d2f0e5aaca2b02363) | `main`, `e30762e42e3cd45f730be51d2f0e5aaca2b02363` (`v1.0-rc1-12-ge30762e`), built from source; the October 11 and 13 walkthroughs used release v1.0-rc1 (`6da3313295010f1bb521a393f15dacf987050254`) | Bootstrap, enrollment, CLI, configuration selection, upload and rollout implementation |
+| [Foundries Update Server](https://github.com/foundriesio/update-server/tree/e30762e42e3cd45f730be51d2f0e5aaca2b02363) | `main`, `e30762e42e3cd45f730be51d2f0e5aaca2b02363` (`v1.0-rc1-12-ge30762e`), built from source and verified in run 3 on 2026-10-13; the earlier walkthroughs used release v1.0-rc1 (`6da3313295010f1bb521a393f15dacf987050254`) | Bootstrap, enrollment, CLI, configuration selection, upload and rollout implementation |
 | [Host composectl](https://github.com/foundriesio/composeapp/tree/07a5b14b2e55f6882f7323ad6a32e62438aa5098) | v96.3.0, `07a5b14b2e55f6882f7323ad6a32e62438aa5098` | Released host packaging tool, publication, ARM64 content download, Docker credential support |
 | [Device composeapp](https://github.com/foundriesio/composeapp/tree/0af6d7702713f36848ae569dc7a6c7f05f1d2abe) | `0af6d7702713f36848ae569dc7a6c7f05f1d2abe` | Device tool revision selected by the pinned meta-foundries recipe |
 | [aktualizr-lite](https://github.com/foundriesio/aktualizr-lite/tree/5d9371869bb83dff10f951d26247cdd4a531bbb7) | `5d9371869bb83dff10f951d26247cdd4a531bbb7` | OS-name derivation, app comparison and unchanged OS handling, matched to the v97 recipe |
@@ -67,6 +68,67 @@ This record describes the guide's evidence and outstanding execution checks.
 | [Arduino documentation](https://github.com/arduino/docs-content/tree/dab66ecbd6ad52cd742da6c19c5b6330a7f2caae) | `dab66ecbd6ad52cd742da6c19c5b6330a7f2caae` | Bughopper connection, 115200 baud, Emergency Download (EDL) procedure, linked hardware illustrations |
 | [kas](https://github.com/siemens/kas/tree/5.4) | 5.4 | Wrapper, schema, container version variable |
 | [`qdl`](https://github.com/linux-msm/qdl/tree/v2.8) | 2.8 | Linux host binary and flashing syntax |
+
+## Run 3 Hardware Walkthrough on 2026-10-13
+
+This record summarizes the verification of [guide revision `c71f6af2564cc7611b56f2ae8298cad8bddbb0a2`](https://github.com/foundriesio/meta-foundries/tree/c71f6af2564cc7611b56f2ae8298cad8bddbb0a2/docs/guides/uno-q-wrynose).
+The run took place from 22:40 to 23:45 UTC on 2026-10-13.
+An agent with read-only file and web access, no machine access, and no lab knowledge read the guide and issued the commands.
+An operator ran each command verbatim on the named machine and returned its raw output.
+The protocol allowed two operator rescues beyond relaying commands and output; none were needed.
+
+### Verified Baseline
+
+| Item | Revision or configuration |
+| --- | --- |
+| Board and access | Arduino UNO Q, 4 GB (4096 MB), with Bughopper for serial access and EDL |
+| Boot firmware | UEFI `6.0.260722.BOOT.MXF.1.0.c1-00536-KODIAKLA-2` |
+| BSP and kernel | meta-qcom `21c9c0d`, meta-qcom-arduino `a65e94a`, meta-qcom-distro `acc7f52`; kernel `7.0.14-gf2e5cd16ede5`; temporary M-05 workaround enabled |
+| Build configuration | Guide kas configuration at `c71f6af`; meta-foundries `ff40dc1`, OpenEmbedded Core `db81c1a`, BitBake `18cca50`, meta-openembedded `8b1d948`; all 13 resolved pins matched |
+| Image identity | Qualcomm Linux Reference Distro (OTA-enabled) `2.99+snapshot-93e9c9de95`; build IDs `unoq-wrynose-os-1` and `unoq-wrynose-os-2`; tag `wrynose` |
+| Client and packaging | aktualizr-lite `97+git` at `5d93718`, with `pacman.os` unset; host composectl v96.3.0 |
+| Server and CLI | Both built using the guide's source-build instructions at update-server `e30762e` (`v1.0-rc1-12-ge30762e`) |
+| Build machine | Ubuntu 24.04.5 x86-64, kas-container 5.4 |
+| Local computer | Separate Ubuntu 24.04.4 x86-64 machine for the server, flashing, and console; qdl v2.8; the guide's transfer steps were exercised |
+
+### Checkpoint Results
+
+| Checkpoint | Result |
+| --- | --- |
+| 1. Prepare the build host | PASS: host checks, kas-container, and guide checkout |
+| 2. Build | PASS: firmware record, M-05 selection, all 13 pins, OS version 1 build (6,927 tasks), archive, and transfer |
+| 3. Flash and connect | PASS: Bughopper EDL, qdl flash of 31 partitions with no errors, reset, serial shell, Wi-Fi, clock, identity, and M-05 checks |
+| 4. Start the update server | PASS: source build, initialization, and serving with `attemptsPerSecond: 20` |
+| 5. Register and select | PASS: registration and UI listing, active services, configuration, CLI login, and selection applied at the next poll; consecutive configuration commands returned no HTTP 429 |
+| 6. Initial update | PASS: shellhttpd version 1 published, pulled over HTTPS, uploaded, rolled out, and responding on the existing OS |
+| 7. OS version 2 and shellhttpd version 2 | PASS: 6,927 build tasks, rollout, reboot, successful finalization, OS version 2 identity, retained M-05 reservation, and application response |
+| 8. Add a second application | PASS: both applications responded; OS checksum and boot ID were unchanged |
+| 9. Application-only update | PASS: shellhttpd returned `X-App-Version: 3`, statushttpd remained available, and OS checksum and boot ID were unchanged |
+
+The combined OS and application update in checkpoint 7 was the run's only OS update.
+An OS-only update with unchanged applications was not exercised.
+Checkpoints 8 and 9 verified application-only changes without an OS reboot.
+
+### Coverage Limits and Follow-Up
+
+- The HTTPS container registry was provisioned before the run and required no login.
+  Registry setup and authenticated registry access were not tested.
+- Build-machine packages were already installed, so the package-installation command was not rerun.
+- Builds used shared download and shared-state caches, plus a local overlay limiting build parallelism.
+  OS version 1 reused 6,499 of 6,927 tasks from shared state; a build without caches was not tested.
+- The run used the Bughopper path and a 4 GB board with M-05.
+  The ADB path and the 2 GB configuration were not exercised in this run.
+- Shells stayed open, so restoring variables in a new shell was not tested.
+  The conditional ARM64 emulation step was not needed by the example Dockerfile.
+- The reader initially missed the local-computer prerequisites and encountered a missing Buildx error.
+  The guide's Ubuntu instructions resolved it without an operator rescue.
+  Add a `docker buildx version` check where Buildx is first needed.
+- Clarify the location of `board-record.txt` when the build and console use separate computers, the first-boot Docker startup delay, and expected build and qdl success messages.
+- Explain the observed client version-parsing warning, initial fioconfig target-parsing message, pre-finalization OSTree version mismatch, and `ffs_fs_kill_sb` shutdown warning.
+- Clarify how kas applies the meta-qcom patches and add a build-page pointer to `kas/diag-download-mode.yml`.
+
+The board's Wi-Fi address changed after the OS update reboot; the guide's address re-check handled it.
+These results apply to the recorded guide and component revisions.
 
 ## October 12 Layer-Set Change and Build
 
@@ -159,7 +221,7 @@ It also found that the board's Wi-Fi address changed across the OS version 2 reb
 The Wi-Fi interface takes a new random hardware address at each boot, so the local network assigned a new address.
 
 This revision adds those findings and builds update-server from `main` at `e30762e`, which raises the request-rate limit to 20 per second.
-That source build has not yet been run against the board.
+The later [run 3 walkthrough](#run-3-hardware-walkthrough-on-2026-10-13) verified that source build against the board.
 
 ### October 11 Hardware Walkthrough of Revision `3039ef5`
 
@@ -231,7 +293,8 @@ Its append targets `linux-arduino_7.0`, matching the source test fixture.
 On October 10, `git apply --check` of the patch against `arch/arm64/boot/dts/qcom/qrb2210-arduino-imola-base.dts` passed.
 It was run at the kernel source the retained Arduino pin selects (linux-arduino 7.0, `122c2c2` from `35f3dfd`).
 That is a textual check only.
-Building, the compiled device-tree contents, the live reservation, and update behavior remain unverified for this guide.
+At the October 10 source review, building, the compiled device-tree contents, the live reservation, and update behavior were unverified for this guide.
+Later build and hardware results are recorded above, including the [run 3 walkthrough](#run-3-hardware-walkthrough-on-2026-10-13).
 The scope is affected 4 GB boards with the firmware memory-map issue, not every UNO Q.
 The reported test-firmware fix is awaiting release; removing the reservation requires validation of released firmware without it.
 
@@ -246,7 +309,7 @@ was checked for device discovery, Bughopper V1/V2 support, EDL entry, and reset 
 The Bughopper permissions rules follow the
 [upstream rules at `4c47a61`](https://github.com/qualcomm/pytactl/blob/4c47a6172e3ee6fabc16fb8b7042004ec9cd140f/60-pytactl.rules).
 `bootToEDL` asserts EDL while cycling power; `reset` clears EDL and cycles power for normal boot.
-These are source checks; hardware execution remains pending.
+These source checks are supplemented by the Bughopper hardware runs recorded above and in the execution-status table.
 
 ## Relationship to the Upstream Server Documentation
 
@@ -289,7 +352,8 @@ The guide downloads and uploads app blobs; supplying only `--apps name=digest` w
 
 ## Execution Status
 
-Before calling the guide hardware-validated, record the following results with the resolved configuration:
+The following table combines the historical checks and run 3 results.
+Run 3 used guide revision `c71f6af` and update server `e30762e`; remaining gaps are explicit.
 
 | Check | Required evidence | Status |
 | --- | --- | --- |
@@ -301,13 +365,13 @@ Before calling the guide hardware-validated, record the following results with t
 | Jumper flashing path | EDL pin sequence, USB enumeration, successful `qdl` write, jumper removal, and normal boot | Not run |
 | ADB path | Device enumeration, root shell, Wi-Fi setup | Enumeration and root shell checked October 13 with a Bughopper-flashed board; Wi-Fi setup over ADB not run |
 | Linux host | Docker Engine, Compose, Buildx, and native USB access | Build host with Docker's packages completed October 11 and 13; local computer with Ubuntu's packages, including `docker-buildx`, completed October 13 |
-| Native server and tools | Linux binaries run, `composectl publish` is available, host registry authentication works, initialization succeeds, and restart preserves the data directory | With release v1.0-rc1 on October 13: initialization, `serve`, CLI login, `composectl` publish and pull. Registry authentication and restart not run (local registry). This revision's source build not run on hardware |
+| Native server and tools | Linux binaries run, `composectl publish` is available, host registry authentication works, initialization succeeds, and restart preserves the data directory | With release v1.0-rc1 on October 13: initialization, `serve`, CLI login, `composectl` publish and pull. Registry authentication and restart not run (local registry). Run 3 also completed initialization, serving, CLI login, publication, and pull with the source build at `e30762e`; registry authentication and server restart remain untested |
 | Enrollment | Successful board command, device identifier, `unoq-lab` certificate OU, `wrynose` tag, Compose package-manager type, heartbeat over gateway | Completed October 11 and 13, except the certificate OU, which was not inspected |
 | App selection | fioconfig delivery and requested app list | Delivered to the board October 13: `shellhttpd`, then `shellhttpd,statushttpd` |
-| First rollout | shellhttpd version 1 response and server result | Completed October 13 with release v1.0-rc1 |
-| Second rollout | New OS build ID, changed boot ID/deployment, version 2 response, server success with `pacman.os` unset and the same memory-workaround selection | Completed October 13 with release v1.0-rc1 |
-| Add a second application | Both HTTP apps respond; original app digest, OS checksum/build ID, and boot ID retained | Completed October 13 with release v1.0-rc1 |
-| Update only the existing app | New image's HTTP header and message; second app digest, OS checksum/build ID, and boot ID retained | Completed October 13 with release v1.0-rc1 |
+| First rollout | shellhttpd version 1 response and server result | Completed October 13 with release v1.0-rc1 and repeated in run 3 with source build `e30762e` |
+| Second rollout | New OS build ID, changed boot ID/deployment, version 2 response, server success with `pacman.os` unset and the same memory-workaround selection | Completed October 13 with release v1.0-rc1 and repeated in run 3 with source build `e30762e` |
+| Add a second application | Both HTTP apps respond; original app digest, OS checksum/build ID, and boot ID retained | Completed October 13 with release v1.0-rc1. Run 3 with `e30762e` confirmed both app responses and unchanged OS checksum and boot ID |
+| Update only the existing app | New image's HTTP header and message; second app digest, OS checksum/build ID, and boot ID retained | Completed October 13 with release v1.0-rc1. Run 3 with `e30762e` confirmed the version 3 header, retained statushttpd, and unchanged OS checksum and boot ID |
 
 The host resource allowance is a planning estimate, not a measured minimum.
 

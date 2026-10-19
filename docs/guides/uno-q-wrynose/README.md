@@ -4,7 +4,7 @@ description: Build, flash, register, select applications, and deliver OS and app
 type: page
 doc-category: informational
 authors: David Griego, Codex:GPT-6
-last-edited: 2026-10-13
+last-edited: 2026-10-19
 license: MIT
 access: public
 references:
@@ -42,11 +42,10 @@ The walkthrough includes these checkpoints:
 8. [Add a second application without updating the OS](application-updates.md#add-a-second-application-without-updating-the-os).
 9. [Update an existing application without updating the OS](application-updates.md#update-an-existing-application-without-updating-the-os).
 
-> **Validation status:** This configuration built on October 12, 2026, from the layer revisions validated on UNO Q hardware on October 8.
-> On October 13, a walkthrough of the previous guide revision completed every checkpoint on an UNO Q.
-> That included the OS and application updates, with update-server release v1.0-rc1.
-> This revision adds the corrections from that walkthrough and builds update-server from `main`, which has not been run on hardware yet.
-> See [sources and validation](validation.md).
+> **Validation status:** On 2026-10-13, a hardware walkthrough of guide revision `c71f6af` passed all nine checkpoints on a 4 GB UNO Q with Bughopper and the temporary M-05 workaround.
+> It used update server and fiocli built from `e30762e` (`v1.0-rc1-12-ge30762e`).
+> The combined OS and application update rebooted and finalized successfully; both application-only changes preserved the OS checksum and boot ID.
+> See [the run 3 record](validation.md#run-3-hardware-walkthrough-on-2026-10-13) for the baseline, results, and coverage limits.
 
 The directory, file names, update tag, and build IDs say Wrynose, the release the guide first targeted.
 This revision builds from development-branch commits instead; [the build page](build.md#what-is-pinned) explains why.
