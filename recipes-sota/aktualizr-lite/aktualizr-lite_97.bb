@@ -9,8 +9,8 @@ LIC_FILES_CHKSUM = "file://LICENSE;md5=815ca599c9df247a0c7f619bab123dad"
 DEPENDS = "asn1c-native boost curl libarchive libsodium openssl ostree sqlite3"
 
 PV = "97+git"
-BRANCH ?= "master"
-SRCREV = "57e4f7f1959a5050fbd35c7a759f94e861c651a5"
+BRANCH ?= "detsch/durable-pending-record"
+SRCREV = "c183787eec0005c55b2130481ac80b454fb435fa"
 
 SRC_URI = "\
     gitsm://github.com/foundriesio/aktualizr-lite;protocol=https;branch=${BRANCH};name=aktualizr-lite \
