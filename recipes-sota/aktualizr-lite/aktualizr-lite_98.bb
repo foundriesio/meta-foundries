@@ -9,7 +9,7 @@ LIC_FILES_CHKSUM = "file://LICENSE;md5=815ca599c9df247a0c7f619bab123dad"
 DEPENDS = "asn1c-native boost curl libarchive libsodium openssl ostree sqlite3"
 
 PV = "98"
-BRANCH ?= "master"
+BRANCH ?= "v98"
 SRCREV = "57e4f7f1959a5050fbd35c7a759f94e861c651a5"
 
 SRC_URI = "\
