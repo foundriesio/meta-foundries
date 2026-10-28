@@ -25,21 +25,21 @@ This layer depends on:
 ```text
 URI: https://git.openembedded.org/openembedded-core
 layers: meta
-branch: master
+branch: wrynose
 revision: HEAD
 ```
 
 ```text
 URI: https://git.openembedded.org/meta-openembedded
 layers: meta-oe, meta-python, meta-filesystems, meta-networking
-branch: master
+branch: wrynose
 revision: HEAD
 ```
 
 ```text
 URI: https://github.com/uptane/meta-updater
 layers: meta-updater (collection "sota")
-branch: master
+branch: wrynose
 revision: HEAD
 ```
 
@@ -53,7 +53,7 @@ This layer has an optional dependency on the meta-virtualization layer:
 ```text
 URI: https://git.yoctoproject.org/meta-virtualization
 layers: meta-virtualization (collection "virtualization-layer")
-branch: master
+branch: wrynose
 revision: HEAD
 ```
 
@@ -70,7 +70,7 @@ This layer has an optional dependency on the meta-arm layer:
 ```text
 URI: https://git.yoctoproject.org/meta-arm
 layers: meta-arm, meta-arm-bsp
-branch: main
+branch: wrynose
 revision: HEAD
 ```
 
