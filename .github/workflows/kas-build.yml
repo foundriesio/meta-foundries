@@ -3,7 +3,7 @@ name: kas build
 on:
   pull_request:
   push:
-    branches: [main]
+    branches: [wrynose]
   workflow_dispatch:
 
 env:
