@@ -1,8 +1,9 @@
 #!/bin/sh -e
 # Copyright (c) 2026 Qualcomm Innovation Center, Inc. All rights reserved.
 # SPDX-License-Identifier: MIT
-# Builds a qemu CI image as OS version 1, derives version 2 from its ostree
-# commit, and stages what the tests boot and upload.
+# Builds a qemu CI image as OS version 1 and derives from its ostree commit
+# version 2, and a broken OS on machines whose kas/<machine>.yml enables
+# boot counting. Stages what the tests boot and upload.
 #
 # Usage: [OTA_TEST_MACHINE=<machine>] tests/qemu-ota/build.sh [OUT_DIR]
 
@@ -17,7 +18,13 @@ command -v ostree >/dev/null || { echo "ostree is required" >&2; exit 1; }
 DEPLOY="$KAS_WORK_DIR/build/tmp/deploy/images/$MACHINE"
 
 cd "$TOPDIR"
-"$KAS_CONTAINER" build "ci/$MACHINE.yml"
+KAS_YAMLS="ci/$MACHINE.yml"
+VERSIONS=2
+if [ -f "tests/qemu-ota/kas/$MACHINE.yml" ]; then
+    KAS_YAMLS="$KAS_YAMLS:tests/qemu-ota/kas/$MACHINE.yml"
+    VERSIONS="$VERSIONS broken"
+fi
+"$KAS_CONTAINER" build "$KAS_YAMLS"
 
 rm -rf "${OUT:?}"
 mkdir -p "$OUT/1"
@@ -41,12 +48,16 @@ base=$(ostree --repo="$repo" rev-parse "$ref")
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-for v in 2; do
+for v in $VERSIONS; do
     overlay="$work/$v"
     mkdir -p "$overlay/usr/lib"
     ostree --repo="$repo" cat "$base" /usr/lib/os-release |
         grep -v '^BUILD_ID=' > "$overlay/usr/lib/os-release"
     echo "BUILD_ID=\"qemu-ota-os-$v\"" >> "$overlay/usr/lib/os-release"
+    if [ "$v" = broken ]; then
+        mkdir -p "$overlay/usr/sbin"
+        ln -s ../bin/false "$overlay/usr/sbin/init"
+    fi
     # Owned by root, as is the tree it lands on.
     tar -C "$overlay" --owner=0 --group=0 --numeric-owner \
         --mode=u=rwX,go=rX -cf "$overlay.tar" usr
