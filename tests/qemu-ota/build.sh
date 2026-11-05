@@ -5,7 +5,11 @@
 # version 2, and a broken OS on machines whose kas/<machine>.yml enables
 # boot counting. Stages what the tests boot and upload.
 #
-# Usage: [OTA_TEST_MACHINE=<machine>] tests/qemu-ota/build.sh [OUT_DIR]
+# Usage: [OTA_TEST_MACHINE=<machine>] [OTA_TEST_KAS_EXTRA=<a.yml:b.yml>] \
+#        tests/qemu-ota/build.sh [OUT_DIR]
+#
+# OTA_TEST_KAS_EXTRA adds kas overlays after the test's own, e.g.
+# ci/include/ci.yml on a CI runner.
 
 TOPDIR=$(realpath "$(dirname "$(readlink -f "$0")")/../..")
 MACHINE=${OTA_TEST_MACHINE:-qemuarm64-secureboot}
@@ -24,7 +28,7 @@ if [ -f "tests/qemu-ota/kas/$MACHINE.yml" ]; then
     KAS_YAMLS="$KAS_YAMLS:tests/qemu-ota/kas/$MACHINE.yml"
     VERSIONS="$VERSIONS broken"
 fi
-"$KAS_CONTAINER" build "$KAS_YAMLS"
+"$KAS_CONTAINER" build "$KAS_YAMLS${OTA_TEST_KAS_EXTRA:+:$OTA_TEST_KAS_EXTRA}"
 
 rm -rf "${OUT:?}"
 mkdir -p "$OUT/1"
